@@ -1,0 +1,29 @@
+# Ollama Modelfile for the fine-tuned Aula notifier.
+# Build:  ollama create aula:v1 -f Modelfile
+# After successful eval gate, tag stable:  ollama cp aula:v1 aula:stable
+
+FROM ./aula-qwen2.5-3b-lora.Q4_K_M.gguf
+
+# Qwen2.5 ChatML template with native <tool_call>/<tool_response> tokens.
+# Ollama auto-detects this for Qwen models; this block is here only if you
+# need to override (e.g., a fork that mangles the chat template).
+# TEMPLATE """{{- range $i, $_ := .Messages }}<|im_start|>{{ .Role }}
+# {{ .Content }}<|im_end|>
+# {{ end }}<|im_start|>assistant
+# """
+
+# Production parameters.
+# num_ctx must comfortably cover a busy-week tool-call trace. 16384 is the
+# tested target; bump to 24576 only if you see truncation in E1.
+PARAMETER num_ctx 16384
+
+# Deterministic by default — the notification task does not benefit from sampling.
+# Override per-request via the API if you want stylistic variation.
+PARAMETER temperature 0.0
+PARAMETER top_p 1.0
+PARAMETER repeat_penalty 1.05
+PARAMETER stop "<|im_end|>"
+
+# A short system message that anchors role + format. The bulk of the rules
+# live in the user prompts (prompt-weekday.js etc.); this is just a nudge.
+SYSTEM """Du er en assistent der laver daglige opslag på dansk om brugerens børn baseret på data fra Aula. Du kalder MCP-værktøjer fra aula-mcp for at hente data og returnerer det færdige Telegram-HTML opslag når du har det du har brug for. Send altid `compact: true` til `aula.posts.list`, `aula.messages.list_threads` og `aula.ugeplan.*`."""

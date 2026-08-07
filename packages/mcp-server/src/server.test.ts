@@ -225,33 +225,35 @@ describe('MCP server: tools/list', () => {
     expect(r.error).toBeUndefined();
     const tools = (r.result as { tools: Array<{ name: string; description: string }> }).tools;
     const names = tools.map((t) => t.name).sort();
-    expect(names).toContain('aula.discover');
-    expect(names).toContain('aula.profiles.list');
-    expect(names).toContain('aula.presence.today');
-    expect(names).toContain('aula.calendar.events');
-    expect(names).toContain('aula.messages.list_threads');
-    expect(names).toContain('aula.messages.get_thread');
-    expect(names).toContain('aula.notifications.list');
-    expect(names).toContain('aula.posts.list');
-    expect(names).toContain('aula.ugeplan.easyiq');
-    expect(names).toContain('aula.ugeplan.meebook');
-    expect(names).toContain('aula.ugeplan.easyiq_skoleportal');
-    expect(names).toContain('aula.opgaver.minuddannelse');
-    expect(names).toContain('aula.ugebrev.minuddannelse');
-    expect(names).toContain('aula.huskelisten.systematic');
-    // aula.raw_request is NOT in the list because AULA_MCP_RAW isn't set.
-    expect(names).not.toContain('aula.raw_request');
+    expect(names).toContain('aula_discover');
+    expect(names).toContain('aula_profiles_list');
+    expect(names).toContain('aula_presence_today');
+    expect(names).toContain('aula_calendar_events');
+    expect(names).toContain('aula_messages_list_threads');
+    expect(names).toContain('aula_messages_get_thread');
+    expect(names).toContain('aula_notifications_list');
+    expect(names).toContain('aula_posts_list');
+    expect(names).toContain('aula_ugeplan_easyiq');
+    expect(names).toContain('aula_ugeplan_meebook');
+    expect(names).toContain('aula_ugeplan_easyiq_skoleportal');
+    expect(names).toContain('aula_opgaver_minuddannelse');
+    expect(names).toContain('aula_ugebrev_minuddannelse');
+    expect(names).toContain('aula_huskelisten_systematic');
+    // aula_raw_request is NOT in the list because AULA_MCP_RAW isn't set.
+    expect(names).not.toContain('aula_raw_request');
+    expect(names.every((name) => /^[a-zA-Z0-9_-]+$/.test(name))).toBe(true);
+    expect(JSON.stringify(tools)).not.toContain('exclusiveMinimum');
   });
 });
 
-describe('MCP server: tools/call(aula.discover)', () => {
+describe('MCP server: tools/call(aula_discover)', () => {
   test('returns a parseable manifest with our fake context', async () => {
     await init();
     const r = await rpc({
       jsonrpc: '2.0',
       id: 2,
       method: 'tools/call',
-      params: { name: 'aula.discover', arguments: {} },
+      params: { name: 'aula_discover', arguments: {} },
     });
     expect(r.error).toBeUndefined();
     const result = r.result as { content: Array<{ type: string; text: string }> };
@@ -269,11 +271,11 @@ describe('MCP server: tools/call(aula.discover)', () => {
     expect(manifest.children[0]?.name).toBe('Emilie');
     expect(manifest.detectedWidgets).toEqual(['0001', '0030']);
     // EasyIQ (0001) should be listed first for ugeplan since it's detected.
-    expect(manifest.capabilities.ugeplan?.tools[0]).toBe('aula.ugeplan.easyiq');
+    expect(manifest.capabilities.ugeplan?.tools[0]).toBe('aula_ugeplan_easyiq');
   });
 });
 
-describe('MCP server: tools/call(aula.posts.list)', () => {
+describe('MCP server: tools/call(aula_posts_list)', () => {
   test('default mode fans out across the guardian groups', async () => {
     await init();
     lastGetPostsArgs = undefined;
@@ -281,7 +283,7 @@ describe('MCP server: tools/call(aula.posts.list)', () => {
       jsonrpc: '2.0',
       id: 100,
       method: 'tools/call',
-      params: { name: 'aula.posts.list', arguments: { limit: 10 } },
+      params: { name: 'aula_posts_list', arguments: { limit: 10 } },
     });
     expect(r.error).toBeUndefined();
     // Fake groupIds returns [42]; the tool should call getPosts with that id.
@@ -301,7 +303,7 @@ describe('MCP server: tools/call(aula.posts.list)', () => {
       id: 101,
       method: 'tools/call',
       params: {
-        name: 'aula.posts.list',
+        name: 'aula_posts_list',
         arguments: { institutionProfileIds: [4995301, 5218369] },
       },
     });
@@ -317,7 +319,7 @@ describe('MCP server: tools/call(aula.posts.list)', () => {
       jsonrpc: '2.0',
       id: 102,
       method: 'tools/call',
-      params: { name: 'aula.posts.list', arguments: { groupId: 999 } },
+      params: { name: 'aula_posts_list', arguments: { groupId: 999 } },
     });
     const args = lastGetPostsArgs as { groupId?: number };
     expect(args?.groupId).toBe(999);
@@ -331,7 +333,7 @@ describe('MCP server: tools/call validation', () => {
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
-      params: { name: 'aula.this_does_not_exist', arguments: {} },
+      params: { name: 'aula_this_does_not_exist', arguments: {} },
     });
     // Either the result is an `isError: true` content payload, or there's a
     // top-level error field. Both are valid MCP shapes; accept either.
@@ -349,7 +351,7 @@ describe('MCP server: tools/call validation', () => {
       jsonrpc: '2.0',
       id: 4,
       method: 'tools/call',
-      params: { name: 'aula.presence.today', arguments: { childIds: [] } },
+      params: { name: 'aula_presence_today', arguments: { childIds: [] } },
     });
     // Zod min(1) → validation error somewhere in the response.
     const text = JSON.stringify(r);

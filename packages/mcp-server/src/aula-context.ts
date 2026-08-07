@@ -62,9 +62,11 @@ export class AulaContext {
    *  when scoped with `parent=group&groupId=<N>`. Cached after first lookup. */
   private cachedGroupIds: readonly number[] | undefined;
   /** Map of groupId → metadata (institutionCode, institutionName, group
-   *  name). Lets `aula.posts.list` attribute each post to a school so the
+   *  name). Lets `aula_posts_list` attribute each post to a school so the
    *  LLM can place posts under the right child. */
-  private cachedGroupMeta: ReadonlyMap<number, { institutionCode?: string; institutionName?: string; name?: string }> | undefined;
+  private cachedGroupMeta:
+    | ReadonlyMap<number, { institutionCode?: string; institutionName?: string; name?: string }>
+    | undefined;
 
   constructor(options: AulaContextOptions = {}) {
     this.store = options.store ?? defaultStore();

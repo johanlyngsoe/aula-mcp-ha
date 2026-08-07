@@ -126,7 +126,7 @@ Then just ask naturally — children's names are fuzzy-matched against the `disc
 
 > *what is on the weekly plan next week for theo*
 
-Claude calls `aula.discover` once, picks the right weekly plan vendor for your school from `detectedWidgets`, and responds in your language.
+Claude calls `aula_discover` once, picks the right weekly plan vendor for your school from `detectedWidgets`, and responds in your language.
 
 ### Claude Desktop
 
@@ -357,9 +357,9 @@ If you already have a European VPS (Hetzner, Scaleway, OVH) and a domain — it 
 
 ## What is in the manifest
 
-Agents call `aula.discover` once and reuse the result for the rest of the session. The manifest tells the agent who the user is, which children can be acted on, which third-party widgets the schools have configured, and which MCP tools to call:
+Agents call `aula_discover` once and reuse the result for the rest of the session. The manifest tells the agent who the user is, which children can be acted on, which third-party widgets the schools have configured, and which MCP tools to call:
 
-![aula.discover manifest pretty-printed](./docs/demos/discover.gif)
+![aula_discover manifest pretty-printed](./docs/demos/discover.gif)
 
 Shape:
 
@@ -371,16 +371,16 @@ Shape:
   tokens: { expires_at, seconds_remaining },
   detectedWidgets: ['0001', '0029', '0030'],   // from Aula's pageConfiguration
   capabilities: {
-    profiles:      { summary, tools: ['aula.profiles.list'] },
-    presence:      { summary, tools: ['aula.presence.today'] },
-    calendar:      { summary, tools: ['aula.calendar.events'] },
-    messages:      { summary, tools: ['aula.messages.list_threads', 'aula.messages.get_thread'] },
-    notifications: { summary, tools: ['aula.notifications.list'] },
-    posts:         { summary, tools: ['aula.posts.list'] },
-    ugeplan:       { summary, tools: ['aula.ugeplan.easyiq'] },          // only the detected vendor
-    opgaver:       { summary, tools: ['aula.opgaver.minuddannelse'] },
-    ugebrev:       { summary, tools: ['aula.ugebrev.minuddannelse'] },
-    huskelisten:   { summary, tools: ['aula.huskelisten.systematic'] }
+    profiles:      { summary, tools: ['aula_profiles_list'] },
+    presence:      { summary, tools: ['aula_presence_today'] },
+    calendar:      { summary, tools: ['aula_calendar_events'] },
+    messages:      { summary, tools: ['aula_messages_list_threads', 'aula_messages_get_thread'] },
+    notifications: { summary, tools: ['aula_notifications_list'] },
+    posts:         { summary, tools: ['aula_posts_list'] },
+    ugeplan:       { summary, tools: ['aula_ugeplan_easyiq'] },          // only the detected vendor
+    opgaver:       { summary, tools: ['aula_opgaver_minuddannelse'] },
+    ugebrev:       { summary, tools: ['aula_ugebrev_minuddannelse'] },
+    huskelisten:   { summary, tools: ['aula_huskelisten_systematic'] }
   },
   usage: {
     cache, nameResolution, pickOne, timeWindows, language
@@ -439,7 +439,7 @@ Full help with examples: `pnpm aula --help`
 | `AULA_MCP_HOST` | `127.0.0.1` | Bind interface. Refuses non-loopback unless `AULA_MCP_ALLOW_REMOTE=1`. |
 | `AULA_MCP_DIR` | `~/.config/aula-mcp` | Config directory (file backend + transcripts + login log). |
 | `AULA_MCP_NO_KEYCHAIN` | off | Set to `1` to disable macOS Keychain and use the file backend instead. Required in Docker. |
-| `AULA_MCP_RAW=1` | off | Enables the `aula.raw_request` escape-hatch tool. |
+| `AULA_MCP_RAW=1` | off | Enables the `aula_raw_request` escape-hatch tool. |
 | `AULA_MCP_LOG=1` | off | Verbose console logs from the auth/client layers. |
 | `AULA_MCP_ALLOW_REMOTE=1` | off | Allows binding to non-loopback addresses (e.g. behind a reverse proxy or in Docker). |
 
@@ -457,7 +457,7 @@ Full help with examples: `pnpm aula --help`
 packages/
   aula-auth/    — MitID + 3072-bit SRP-6a + OAuth/SAML chain + token store + wire trace
   aula-client/  — Aula REST API + version probing + integration plugins
-  mcp-server/   — Hono + @modelcontextprotocol/sdk + aula.discover + 11 capability tools
+  mcp-server/   — Hono + @modelcontextprotocol/sdk + aula_discover + 11 capability tools
 apps/
   cli/          — aula login/status/whoami/doctor/log/transcript/logout
 ```
@@ -488,7 +488,7 @@ A few issues from `scaarup/aula`'s tracker that are addressed here:
 | [#310](https://github.com/scaarup/aula/issues/310) — RelayState missing in Level-3 SAML response | `extractSamlForm` returns `hadRelayState: false` and an empty string instead of throwing. |
 | [#306, #287](https://github.com/scaarup/aula/issues/306) — `post-broker-login` returns 200 with a confirmation form instead of 302 | `detectConfirmationForm` finds `button#confirmation-button`, submits its form, and continues. |
 | [#290, #351](https://github.com/scaarup/aula/issues/351) — `password`/`token` required for auth methods that don't need them | `AulaLoginOptions` only requires fields for the selected `method`. The APP method does not need a password. |
-| [PR #352](https://github.com/scaarup/aula/pull/352) — EasyIQ SkolePortal (widget 0128) | Implemented as `EasyIqSkoleportalClient` + `aula.ugeplan.easyiq_skoleportal` MCP tool. Per-child auth + Danish entity decode. |
+| [PR #352](https://github.com/scaarup/aula/pull/352) — EasyIQ SkolePortal (widget 0128) | Implemented as `EasyIqSkoleportalClient` + `aula_ugeplan_easyiq_skoleportal` MCP tool. Per-child auth + Danish entity decode. |
 | Sensitive messages (`status.code` 403) | Surfaced as typed `AulaStepUpRequiredError`; MCP tool returns structured `step_up_required` JSON instead of empty data. |
 
 ---

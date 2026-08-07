@@ -1,0 +1,37 @@
+# MLX-LM LoRA config — consumed by `python -m mlx_lm.lora --train --config lora.yaml`.
+# Starting points. Tune after first run; re-evaluate when dataset size doubles.
+
+model: "Qwen/Qwen2.5-3B-Instruct"
+train: true
+
+# Where the data lives. Override with --data <path> on the CLI if you keep
+# splits outside the default location.
+data: "~/aula-train/splits"
+
+# LoRA hyperparameters.
+# rank=16 is a solid starting point for a templated, multi-round task.
+# Bump to 32 if validation loss plateaus high; drop to 8 if you overfit fast.
+fine_tune_type: "lora"
+num_layers: 16            # number of transformer layers to apply LoRA to
+lora_parameters:
+  rank: 16
+  scale: 20.0             # = alpha (32) / rank (16) * scale-factor convention varies; double-check your mlx-lm version
+  dropout: 0.0
+
+# Optimization.
+optimizer: "adamw"
+learning_rate: 1.0e-4
+batch_size: 2
+iters: 600                # ~2-3 epochs over 500 examples; watch validation loss
+max_seq_length: 8192      # busy weeks can exceed this; bump to 12288 if you see truncation warnings
+grad_checkpoint: true
+
+# Checkpointing + logging.
+adapter_path: "~/aula-train/checkpoints/lora-adapter"
+save_every: 100
+steps_per_report: 10
+steps_per_eval: 50
+val_batches: 25
+
+# Seed for reproducibility. Bump per retrain so different runs don't collide on checkpoint files.
+seed: 42

@@ -112,7 +112,7 @@ describe('buildDiscoverManifest', () => {
   test('Meebook widget (0004) → meebook tool listed first for ugeplan', async () => {
     const m = await buildDiscoverManifest(fakeContext({ widgets: ['0004'] }));
     expect(m.detectedWidgets).toContain('0004');
-    expect(m.capabilities.ugeplan?.tools).toEqual(['aula.ugeplan.meebook']);
+    expect(m.capabilities.ugeplan?.tools).toEqual(['aula_ugeplan_meebook']);
     expect(m.capabilities.ugeplan?.summary).toContain('meebook');
     // Meebook surfaces the one-time browser SSO prerequisite as a note.
     expect(m.capabilities.ugeplan?.notes).toContain('Meebook');
@@ -121,7 +121,7 @@ describe('buildDiscoverManifest', () => {
   test('EasyIQ SkolePortal widget (0128) → easyiq_skoleportal listed first', async () => {
     const m = await buildDiscoverManifest(fakeContext({ widgets: ['0128'] }));
     expect(m.detectedWidgets).toContain('0128');
-    expect(m.capabilities.ugeplan?.tools[0]).toBe('aula.ugeplan.easyiq_skoleportal');
+    expect(m.capabilities.ugeplan?.tools[0]).toBe('aula_ugeplan_easyiq_skoleportal');
   });
 
   test('all known widgets light up their respective capabilities', async () => {
@@ -130,10 +130,10 @@ describe('buildDiscoverManifest', () => {
     );
     expect(m.detectedWidgets).toEqual(['0001', '0029', '0030', '0062', '0128', '0142']);
     // ugeplan has both EasyIQ and SkolePortal detected
-    expect(m.capabilities.ugeplan?.tools).toContain('aula.ugeplan.easyiq');
-    expect(m.capabilities.ugeplan?.tools).toContain('aula.ugeplan.easyiq_skoleportal');
+    expect(m.capabilities.ugeplan?.tools).toContain('aula_ugeplan_easyiq');
+    expect(m.capabilities.ugeplan?.tools).toContain('aula_ugeplan_easyiq_skoleportal');
     // lektier surfaces only when 0142 is detected.
-    expect(m.capabilities.lektier?.tools).toEqual(['aula.lektier.easyiq']);
+    expect(m.capabilities.lektier?.tools).toEqual(['aula_lektier_easyiq']);
     expect(m.capabilities.lektier?.notes).toBeUndefined();
     // No 'not detected' notes for these capabilities
     expect(m.capabilities.opgaver?.notes).toBeUndefined();

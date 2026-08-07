@@ -15,10 +15,10 @@ function jsonContent(data: unknown): { content: Array<{ type: 'text'; text: stri
 }
 
 export function registerTools(server: McpServer, context: AulaContext): void {
-  // --- aula.discover -------------------------------------------------------
+  // --- aula_discover -------------------------------------------------------
 
   server.registerTool(
-    'aula.discover',
+    'aula_discover',
     {
       title: 'Discover Aula context',
       description:
@@ -34,10 +34,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.profiles.list --------------------------------------------------
+  // --- aula_profiles_list --------------------------------------------------
 
   server.registerTool(
-    'aula.profiles.list',
+    'aula_profiles_list',
     {
       title: 'List Aula profiles',
       description: 'Raw profiles.getProfilesByLogin response — every child + institution.',
@@ -49,10 +49,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.presence.today -------------------------------------------------
+  // --- aula_presence_today -------------------------------------------------
 
   server.registerTool(
-    'aula.presence.today',
+    'aula_presence_today',
     {
       title: 'Daily presence overview',
       description:
@@ -61,9 +61,9 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         '8=KOMMET_SELV.',
       inputSchema: {
         childIds: z
-          .array(z.number().int().positive())
+          .array(z.number().int().min(1))
           .min(1)
-          .describe('Aula child IDs (from aula.discover.children[].id)'),
+          .describe('Aula child IDs (from aula_discover.children[].id)'),
       },
     },
     async (args) => {
@@ -72,24 +72,24 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.calendar.events ------------------------------------------------
+  // --- aula_calendar_events ------------------------------------------------
 
   server.registerTool(
-    'aula.calendar.events',
+    'aula_calendar_events',
     {
       title: 'Calendar events (school schedule)',
       description:
         'Lessons + events for the given institution-profile IDs. ' +
-        'Get profileIds from aula.discover → children[].institution.id (NOT children[].id or children[].userId). ' +
+        'Get profileIds from aula_discover → children[].institution.id (NOT children[].id or children[].userId). ' +
         'Pass `range` for a preset window (today/tomorrow/this_week/next_week) ' +
         'OR `start`+`end` for a specific window. Timestamps are formatted as Aula ' +
         'expects: "YYYY-MM-DD HH:MM:SS.0000+ZZZZ". Aula uses Europe/Copenhagen.',
       inputSchema: {
-        profileIds: z.array(z.number().int().positive()).min(1),
+        profileIds: z.array(z.number().int().min(1)).min(1),
         range: z.enum(['today', 'tomorrow', 'this_week', 'next_week']).optional(),
         start: z.string().min(1).optional(),
         end: z.string().min(1).optional(),
-        resourceIds: z.array(z.number().int().positive()).optional(),
+        resourceIds: z.array(z.number().int().min(1)).optional(),
       },
     },
     async (args) => {
@@ -114,10 +114,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.notifications.list ---------------------------------------------
+  // --- aula_notifications_list ---------------------------------------------
 
   server.registerTool(
-    'aula.notifications.list',
+    'aula_notifications_list',
     {
       title: 'Aula notifications',
       description: 'Unread items + activity for the active guardian profile.',
@@ -129,10 +129,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.posts.list -----------------------------------------------------
+  // --- aula_posts_list -----------------------------------------------------
 
   server.registerTool(
-    'aula.posts.list',
+    'aula_posts_list',
     {
       title: 'Aula posts (class news feed)',
       description:
@@ -145,14 +145,14 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         groupId: z
           .number()
           .int()
-          .positive()
+          .min(1)
           .optional()
           .describe(
             'Restrict to a single group (from profileContext.institutions[].groups[].id). ' +
               'Omit to fan out across all groups.',
           ),
         institutionProfileIds: z
-          .array(z.number().int().positive())
+          .array(z.number().int().min(1))
           .min(1)
           .optional()
           .describe(
@@ -164,9 +164,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           .string()
           .min(1)
           .optional()
-          .describe(
-            'Numeric postId cursor (Aula 400s on date strings). Omit for the first page.',
-          ),
+          .describe('Numeric postId cursor (Aula 400s on date strings). Omit for the first page.'),
       },
     },
     async (args) => {
@@ -206,8 +204,8 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return jsonContent({
           posts: [],
           _note:
-            "No groups discovered from profileContext.institutions[].groups + " +
-            "municipalGroups. Either the guardian has no group memberships, or " +
+            'No groups discovered from profileContext.institutions[].groups + ' +
+            'municipalGroups. Either the guardian has no group memberships, or ' +
             "getProfileContext('guardian') failed.",
         });
       }
@@ -268,11 +266,11 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.raw_request (gated) --------------------------------------------
+  // --- aula_raw_request (gated) --------------------------------------------
 
   if (process.env.AULA_MCP_RAW === '1') {
     server.registerTool(
-      'aula.raw_request',
+      'aula_raw_request',
       {
         title: 'Raw Aula API call (escape hatch)',
         description:
@@ -292,10 +290,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     );
   }
 
-  // --- aula.messages.list_threads ------------------------------------------
+  // --- aula_messages_list_threads ------------------------------------------
 
   server.registerTool(
-    'aula.messages.list_threads',
+    'aula_messages_list_threads',
     {
       title: 'List Aula message threads',
       description: 'Most recent first. Use `page` for pagination (0-indexed).',
@@ -314,14 +312,14 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.ugeplan.* ------------------------------------------------------
+  // --- aula_ugeplan_* ------------------------------------------------------
   //
   // Each provider has its own tool. The agent picks the right one based on
   // the institution-to-provider mapping (currently: try whichever the
   // school uses; long term, plumb this into discover).
 
   const integrationContextShape = {
-    childIds: z.array(z.number().int().positive()).min(1),
+    childIds: z.array(z.number().int().min(1)).min(1),
     institutionCodes: z.array(z.string().min(1)).min(1),
     isoWeek: z
       .string()
@@ -371,13 +369,13 @@ export function registerTools(server: McpServer, context: AulaContext): void {
   }
 
   const integrationArgHint =
-    'Pass childIds from aula.discover → children[].id, ' +
+    'Pass childIds from aula_discover → children[].id, ' +
     'institutionCodes from children[].institution.code, ' +
     'and isoWeek as "YYYY-Www" for the target week (omit for current week). ' +
     'Returns the full week — filter by date in your response.';
 
   server.registerTool(
-    'aula.ugeplan.easyiq',
+    'aula_ugeplan_easyiq',
     {
       title: 'EasyIQ weekly plan',
       description: `Weekly plan from EasyIQ for the given children. Use when the school is on EasyIQ. ${integrationArgHint}`,
@@ -390,7 +388,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
   );
 
   server.registerTool(
-    'aula.ugeplan.meebook',
+    'aula_ugeplan_meebook',
     {
       title: 'Meebook weekly plan',
       description: `Weekly plan from Meebook for the given children. Use when the school is on Meebook. ${integrationArgHint}`,
@@ -403,12 +401,12 @@ export function registerTools(server: McpServer, context: AulaContext): void {
   );
 
   server.registerTool(
-    'aula.ugeplan.easyiq_skoleportal',
+    'aula_ugeplan_easyiq_skoleportal',
     {
       title: 'EasyIQ SkolePortal weekly plan',
       description:
         'Weekly plan from EasyIQ SkolePortal (widget 0128) — a different EasyIQ product than ' +
-        '`aula.ugeplan.easyiq` (widget 0001). Use when discover.detectedWidgets contains "0128". ' +
+        '`aula_ugeplan_easyiq` (widget 0001). Use when discover.detectedWidgets contains "0128". ' +
         integrationArgHint,
       inputSchema: integrationContextShape,
     },
@@ -419,12 +417,12 @@ export function registerTools(server: McpServer, context: AulaContext): void {
   );
 
   server.registerTool(
-    'aula.lektier.easyiq',
+    'aula_lektier_easyiq',
     {
       title: 'EasyIQ Lektier (homework)',
       description:
         'Homework items from EasyIQ Lektier (widget 0142) — same vendor as ' +
-        '`aula.ugeplan.easyiq_skoleportal` but a separate "Lektier" product. ' +
+        '`aula_ugeplan_easyiq_skoleportal` but a separate "Lektier" product. ' +
         'Use when discover.detectedWidgets contains "0142".',
       inputSchema: integrationContextShape,
     },
@@ -435,7 +433,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
   );
 
   server.registerTool(
-    'aula.opgaver.minuddannelse',
+    'aula_opgaver_minuddannelse',
     {
       title: 'Min Uddannelse opgaveliste',
       description: 'Homework / task list from Min Uddannelse for the given children.',
@@ -448,7 +446,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
   );
 
   server.registerTool(
-    'aula.ugebrev.minuddannelse',
+    'aula_ugebrev_minuddannelse',
     {
       title: 'Min Uddannelse ugebrev',
       description: 'Weekly newsletter (ugebrev) from Min Uddannelse.',
@@ -461,7 +459,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
   );
 
   server.registerTool(
-    'aula.huskelisten.systematic',
+    'aula_huskelisten_systematic',
     {
       title: 'Systematic Huskelisten reminders',
       description:
@@ -491,10 +489,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
-  // --- aula.messages.get_thread --------------------------------------------
+  // --- aula_messages_get_thread --------------------------------------------
 
   server.registerTool(
-    'aula.messages.get_thread',
+    'aula_messages_get_thread',
     {
       title: 'Read a single thread',
       description:
@@ -502,7 +500,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         'this tool returns an error code that means the user must MitID step-up to read it ' +
         '(currently a fresh `aula login` from the CLI).',
       inputSchema: {
-        threadId: z.number().int().positive(),
+        threadId: z.number().int().min(1),
         page: z.number().int().min(0).default(0).optional(),
       },
     },

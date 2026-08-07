@@ -1,5 +1,5 @@
 /**
- * Date-range helpers for `aula.calendar.events`.
+ * Date-range helpers for `aula_calendar_events`.
  *
  * Aula expects timestamps in `YYYY-MM-DD HH:MM:SS.0000+ZZZZ` format,
  * Europe/Copenhagen wall-clock time (which is +0100 in winter, +0200 in

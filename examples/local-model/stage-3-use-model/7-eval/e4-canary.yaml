@@ -1,0 +1,107 @@
+# E4 — Production canary with auto-rollback.
+#
+# Tracks two sensors:
+#   - input_number.aula_local_pass_rate    — moving 7-day pass rate of the
+#     structural validator (set by 8-fallback/retry-and-fallback flow).
+#   - binary_sensor.aula_local_healthy     — sensor that goes off when last
+#     daily run failed structural validation OR Ollama timed out.
+#
+# When pass rate drops below 0.9 OR healthy sensor stays off for >24h, this
+# automation reverts the daily script's agent_id to Gemini and pages you.
+#
+# Drop this into /config/automations/ and reload, or paste into automations.yaml.
+
+automation:
+  - id: aula_canary_revert_to_gemini
+    alias: "Aula canary: revert to Gemini on local degradation"
+    trigger:
+      # Trigger 1: pass rate dropped under 90% over the last 7 days
+      - platform: numeric_state
+        entity_id: input_number.aula_local_pass_rate
+        below: 0.9
+        for:
+          hours: 1
+      # Trigger 2: health sensor has been off for over 24h
+      - platform: state
+        entity_id: binary_sensor.aula_local_healthy
+        to: "off"
+        for:
+          hours: 24
+    condition:
+      # Only revert once; don't loop if already on Gemini.
+      - condition: state
+        entity_id: input_select.aula_active_agent
+        state: "ollama"
+    action:
+      - service: input_select.select_option
+        target:
+          entity_id: input_select.aula_active_agent
+        data:
+          option: "gemini"
+      - service: notify.telegram_admin
+        data:
+          message: >
+            ⚠️ Aula local model degraded.
+            Pass rate = {{ states('input_number.aula_local_pass_rate') }}.
+            Reverted to Gemini. Inspect /config/aula-train/ and retrain.
+      - service: persistent_notification.create
+        data:
+          title: "Aula local model degraded"
+          message: >
+            Reverted to Gemini at {{ now().isoformat() }}.
+            Investigate before re-enabling.
+
+  - id: aula_canary_record_pass
+    alias: "Aula canary: record validator pass/fail"
+    trigger:
+      - platform: event
+        event_type: aula_local_validator_result
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.aula_local_pass_rate
+        data:
+          # Read 7-day window from a separate template sensor; keep this simple:
+          value: "{{ trigger.event.data.rolling_pass_rate | float }}"
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.aula_local_last_ok
+        data: {}
+      - condition: template
+        value_template: "{{ trigger.event.data.ok | bool }}"
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.aula_local_last_ok
+
+# Supporting helpers (paste under their respective domain configs):
+#
+# input_select:
+#   aula_active_agent:
+#     name: "Aula active LLM agent"
+#     options: ["ollama", "gemini"]
+#     initial: "ollama"
+#
+# input_number:
+#   aula_local_pass_rate:
+#     name: "Aula local validator pass rate (7d)"
+#     min: 0
+#     max: 1
+#     step: 0.01
+#     initial: 1.0
+#
+# input_boolean:
+#   aula_local_last_ok:
+#     name: "Aula local last run OK"
+#     initial: true
+#
+# binary_sensor:
+#   - platform: template
+#     sensors:
+#       aula_local_healthy:
+#         friendly_name: "Aula local healthy"
+#         value_template: "{{ is_state('input_boolean.aula_local_last_ok', 'on') }}"
+#         delay_off:
+#           hours: 24
+#
+# Your daily-notification script reads input_select.aula_active_agent to
+# choose which conversation agent_id to call. See 8-fallback/retry-and-fallback.md.

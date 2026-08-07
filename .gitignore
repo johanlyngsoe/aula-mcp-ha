@@ -43,3 +43,17 @@ tokens.json
 # repo working tree if the user picks a dumb path.
 *.key
 aula-bundle/
+
+# local-model pipeline (examples/local-model/) — contains kids' names,
+# teacher messages, schedules. NEVER commit these.
+examples/local-model/**/data/
+examples/local-model/**/splits/
+examples/local-model/**/checkpoints/
+examples/local-model/**/fused-model/
+examples/local-model/**/hf-model/
+examples/local-model/**/gguf/
+examples/local-model/**/raw/
+examples/local-model/**/eval/
+examples/local-model/**/replay-progress.jsonl
+examples/local-model/**/*.gguf
+examples/local-model/**/*.safetensors

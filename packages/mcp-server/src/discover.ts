@@ -1,5 +1,5 @@
 /**
- * The `aula.discover` tool — the central thing this MCP server exists for.
+ * The `aula_discover` tool — the central thing this MCP server exists for.
  *
  * One call returns a typed manifest of the user's children, institutions,
  * available capabilities, and which subordinate tools the agent can call. The
@@ -48,7 +48,7 @@ export interface DiscoverManifest {
   };
   children: DiscoveredChild[];
   /** Guardian's institutionProfile.id per school (the parent's profile at
-   *  each institution they're registered at). Required by `aula.posts.list`
+   *  each institution they're registered at). Required by `aula_posts_list`
    *  as `institutionProfileIds[]`. Distinct from `children[].institution.id`. */
   institutionProfileIds: number[];
   apiVersion: number;
@@ -62,7 +62,7 @@ export interface DiscoverManifest {
   /** Widget IDs the schools surfaced in pageConfiguration. Useful when
    *  diagnosing "the agent can't find my kid's ugeplan". */
   detectedWidgets: string[];
-  /** True when AULA_MCP_RAW=1 — the aula.raw_request escape hatch is callable. */
+  /** True when AULA_MCP_RAW=1 — the aula_raw_request escape hatch is callable. */
   rawRequestEnabled: boolean;
   /** Inline hints repeating server `instructions` so the agent has the
    *  workflow next to the data it just read. Cheaper to ground on this
@@ -83,24 +83,24 @@ export interface DiscoverManifest {
 const WIDGET_PROVIDER_MAP: Readonly<
   Record<string, { capability: string; provider: string; tool: string }>
 > = Object.freeze({
-  '0001': { capability: 'ugeplan', provider: 'easyiq', tool: 'aula.ugeplan.easyiq' },
-  '0004': { capability: 'ugeplan', provider: 'meebook', tool: 'aula.ugeplan.meebook' },
-  '0029': { capability: 'ugebrev', provider: 'minuddannelse', tool: 'aula.ugebrev.minuddannelse' },
-  '0030': { capability: 'opgaver', provider: 'minuddannelse', tool: 'aula.opgaver.minuddannelse' },
+  '0001': { capability: 'ugeplan', provider: 'easyiq', tool: 'aula_ugeplan_easyiq' },
+  '0004': { capability: 'ugeplan', provider: 'meebook', tool: 'aula_ugeplan_meebook' },
+  '0029': { capability: 'ugebrev', provider: 'minuddannelse', tool: 'aula_ugebrev_minuddannelse' },
+  '0030': { capability: 'opgaver', provider: 'minuddannelse', tool: 'aula_opgaver_minuddannelse' },
   '0062': {
     capability: 'huskelisten',
     provider: 'systematic',
-    tool: 'aula.huskelisten.systematic',
+    tool: 'aula_huskelisten_systematic',
   },
   '0128': {
     capability: 'ugeplan',
     provider: 'easyiq_skoleportal',
-    tool: 'aula.ugeplan.easyiq_skoleportal',
+    tool: 'aula_ugeplan_easyiq_skoleportal',
   },
   '0142': {
     capability: 'lektier',
     provider: 'easyiq_lektier',
-    tool: 'aula.lektier.easyiq',
+    tool: 'aula_lektier_easyiq',
   },
 });
 
@@ -165,14 +165,14 @@ export async function buildDiscoverManifest(context: AulaContext): Promise<Disco
     rawRequestEnabled: process.env.AULA_MCP_RAW === '1',
     usage: {
       cache:
-        'Reuse this manifest for the rest of the session. Do not call aula.discover again unless a tool reports unknown children/widgets.',
+        'Reuse this manifest for the rest of the session. Do not call aula_discover again unless a tool reports unknown children/widgets.',
       nameResolution:
         'Match kid names from the user prompt against children[].name (case-insensitive, partial). E.g. "luk" matches "Lukas". ' +
         'Use children[].id for childIds (presence.today, ugeplan, opgaver, ugebrev, huskelisten, lektier). ' +
-        'Use children[].institution.id for profileIds on calendar.events — the CHILD\'s institution-profile id, NOT child.id. ' +
+        "Use children[].institution.id for profileIds on calendar.events — the CHILD's institution-profile id, NOT child.id. " +
         'Use children[].institution.code for institutionCodes (ugeplan, opgaver, ugebrev, huskelisten, lektier). ' +
         'Use children[].userId only as sessionId/sessionUUID when a third-party integration explicitly asks for it. ' +
-        'For aula.posts.list, pass institutionProfileIds (top-level field on this manifest — the GUARDIAN\'s profile ids per school, distinct from children[].institution.id). It defaults to all of them when omitted, so usually you can leave it off.',
+        "For aula_posts_list, pass institutionProfileIds (top-level field on this manifest — the GUARDIAN's profile ids per school, distinct from children[].institution.id). It defaults to all of them when omitted, so usually you can leave it off.",
       pickOne:
         'For ugeplan/ugebrev/opgaver/huskelisten, call only capabilities[area].tools[0] — that is the provider this user actually has. Skip alternates unless the first errors.',
       timeWindows:
@@ -213,9 +213,9 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
   // — `pickOne` in usage tells it not to, but a one-element array is more
   // load-bearing than a hint.
   const ugeplanCanonical = [
-    'aula.ugeplan.meebook',
-    'aula.ugeplan.easyiq',
-    'aula.ugeplan.easyiq_skoleportal',
+    'aula_ugeplan_meebook',
+    'aula_ugeplan_easyiq',
+    'aula_ugeplan_easyiq_skoleportal',
   ];
   const ugeplanTools =
     ugeplanDetected.length > 0 ? dedupe(ugeplanDetected.map((d) => d.tool)) : ugeplanCanonical;
@@ -223,28 +223,28 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
   return {
     profiles: {
       summary: 'Read profile and child information for the logged-in guardian.',
-      tools: ['aula.profiles.list'],
+      tools: ['aula_profiles_list'],
     },
     presence: {
       summary: 'Daily presence for one or more children: arrived/sick/picked up etc.',
-      tools: ['aula.presence.today'],
+      tools: ['aula_presence_today'],
     },
     calendar: {
       summary:
         'School-schedule lessons (skoleskema). Pass `range: "this_week"` for the simplest call.',
-      tools: ['aula.calendar.events'],
+      tools: ['aula_calendar_events'],
     },
     messages: {
       summary: 'Aula messaging threads. Sensitive threads require MitID step-up.',
-      tools: ['aula.messages.list_threads', 'aula.messages.get_thread'],
+      tools: ['aula_messages_list_threads', 'aula_messages_get_thread'],
     },
     notifications: {
       summary: 'Unread items + activity badge counts for the active guardian.',
-      tools: ['aula.notifications.list'],
+      tools: ['aula_notifications_list'],
     },
     posts: {
       summary: 'Class-level news / posts feed (teacher updates).',
-      tools: ['aula.posts.list'],
+      tools: ['aula_posts_list'],
     },
     ugeplan: {
       summary:
@@ -258,7 +258,7 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
     },
     opgaver: {
       summary: 'Homework / task list from Min Uddannelse.',
-      tools: ['aula.opgaver.minuddannelse'],
+      tools: ['aula_opgaver_minuddannelse'],
       ...(opgaverDetected.length === 0
         ? {
             notes:
@@ -268,7 +268,7 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
     },
     ugebrev: {
       summary: 'Weekly newsletter from Min Uddannelse.',
-      tools: ['aula.ugebrev.minuddannelse'],
+      tools: ['aula_ugebrev_minuddannelse'],
       ...(ugebrevDetected.length === 0
         ? {
             notes:
@@ -278,7 +278,7 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
     },
     huskelisten: {
       summary: 'Homework reminders from Systematic.',
-      tools: ['aula.huskelisten.systematic'],
+      tools: ['aula_huskelisten_systematic'],
       ...(huskelistenDetected.length === 0
         ? {
             notes:
@@ -288,7 +288,7 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
     },
     lektier: {
       summary: 'Homework items from EasyIQ Lektier (widget 0142).',
-      tools: ['aula.lektier.easyiq'],
+      tools: ['aula_lektier_easyiq'],
       ...(lektierDetected.length === 0
         ? {
             notes:

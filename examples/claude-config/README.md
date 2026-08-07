@@ -22,4 +22,4 @@ See [`claude-desktop.json`](./claude-desktop.json).
 
 ## What the agent should do first
 
-Tell the agent (in its system prompt or first message): **"Call `aula.discover` first, then use the listed subordinate tools to answer the user's question."** That way it picks integrations dynamically based on which providers your school uses.
+Tell the agent (in its system prompt or first message): **"Call `aula_discover` first, then use the listed subordinate tools to answer the user's question."** That way it picks integrations dynamically based on which providers your school uses.

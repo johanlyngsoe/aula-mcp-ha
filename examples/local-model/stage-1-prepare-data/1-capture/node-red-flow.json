@@ -1,0 +1,53 @@
+[
+  {
+    "id": "aula-capture-tab",
+    "type": "tab",
+    "label": "Aula training capture",
+    "disabled": false,
+    "info": "Captures each daily notification's final prompt + response to /config/aula-train/.\n\nWire the input of `aula-capture-build` to the same upstream node that produces the assembled prompt + Gemini response in your existing flow.\n\nAdjust msg paths inside `aula-capture-build` to match your flow's variable names."
+  },
+  {
+    "id": "aula-capture-build",
+    "type": "function",
+    "z": "aula-capture-tab",
+    "name": "Build capture record",
+    "func": "// Adapt these accessors to your existing flow's message shape.\n// The defaults assume:\n//   - msg.kind        ← 'weekday' | 'week-end' | 'week-start' (set by your prompt-builder fn)\n//   - msg.text        ← the assembled prompt string (output of prompt-weekday.js etc.)\n//   - msg.response    ← the Gemini final text response\n//   - msg.conv_id     ← HA conversation_id, if available; else falls back to timestamp\n\nconst record = {\n    ts: new Date().toISOString(),\n    kind: msg.kind || 'unknown',\n    conv_id: msg.conv_id || msg.payload?.conversation_id || ('ts-' + Date.now()),\n    prompt: msg.text || msg.payload?.prompt || '',\n    response: msg.response || msg.payload?.response || msg.payload || '',\n};\n\n// File-out node wants a string payload; JSONL = one record per line.\nmsg.payload = JSON.stringify(record);\n\n// Daily-rotated filename. Same dir as the MCP tracer.\nconst today = new Date().toISOString().slice(0, 10);\nmsg.filename = `/config/aula-train/conv-${today}.jsonl`;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 320,
+    "y": 160,
+    "wires": [["aula-capture-write"]]
+  },
+  {
+    "id": "aula-capture-write",
+    "type": "file",
+    "z": "aula-capture-tab",
+    "name": "Append to /config/aula-train/conv-*.jsonl",
+    "filename": "",
+    "filenameType": "msg",
+    "appendNewline": true,
+    "createDir": true,
+    "overwriteFile": "false",
+    "encoding": "utf8",
+    "x": 620,
+    "y": 160,
+    "wires": [[]]
+  },
+  {
+    "id": "aula-capture-inject-test",
+    "type": "inject",
+    "z": "aula-capture-tab",
+    "name": "Manual smoke test",
+    "props": [
+      { "p": "kind", "v": "weekday", "vt": "str" },
+      { "p": "text", "v": "TEST PROMPT", "vt": "str" },
+      { "p": "response", "v": "<b>TEST RESPONSE</b>", "vt": "str" }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "x": 120,
+    "y": 240,
+    "wires": [["aula-capture-build"]]
+  }
+]
