@@ -25,10 +25,9 @@ echo "--- Aula MCP: startup health check ---"
 if bun /app/apps/cli/src/index.ts doctor; then
   echo "--- Health check passed ---"
 else
-  echo "--- Health check failed — logging in as '$MITID_USERNAME' ---"
-  echo "--- Open Settings → Add-ons → Aula MCP → Log tab and scan the QR code with the MitID app ---"
-  bun /app/apps/cli/src/index.ts login --username "$MITID_USERNAME" --identity "$MITID_IDENTITY" || \
-    echo "--- Login failed — server will start but Aula tools will not work until you log in ---"
+  echo "--- Health check failed ---"
+  echo "--- Aula login is required. Run login manually from the add-on container. ---"
+  echo "--- Server will start, but Aula tools will not work until login succeeds. ---"
 fi
 
 echo "--- Starting MCP server on :$AULA_MCP_PORT ---"
