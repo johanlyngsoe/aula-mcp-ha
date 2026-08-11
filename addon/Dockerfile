@@ -10,7 +10,7 @@ WORKDIR /app
 COPY config.yaml /tmp/addon-config.yaml
 
 # Clone source and install dependencies at build time.
-RUN git clone https://github.com/madslundt/aula-mcp-ha.git . \
+RUN git clone https://github.com/johanlyngsoe/aula-mcp-ha.git . \
     && bun install
 
 COPY run.sh /run.sh

@@ -14,6 +14,144 @@ function jsonContent(data: unknown): { content: Array<{ type: 'text'; text: stri
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
 
+function htmlToText(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+
+  return value
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/(div|p|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n')
+    .trim();
+}
+
+function compactPost(post: Record<string, unknown>): Record<string, unknown> {
+  const content = post.content as { html?: unknown } | undefined;
+
+  const relatedProfiles = Array.isArray(post.relatedProfiles)
+    ? post.relatedProfiles
+    : [];
+
+  const children = relatedProfiles
+    .map((profile) => {
+      if (!profile || typeof profile !== 'object') return undefined;
+      const p = profile as Record<string, unknown>;
+      return typeof p.fullName === 'string' ? p.fullName : undefined;
+    })
+    .filter((name): name is string => Boolean(name));
+
+  const sharedWithGroups = Array.isArray(post.sharedWithGroups)
+    ? post.sharedWithGroups
+    : [];
+
+  const groups = sharedWithGroups
+    .map((group) => {
+      if (!group || typeof group !== 'object') return undefined;
+      const g = group as Record<string, unknown>;
+      return typeof g.name === 'string' ? g.name : undefined;
+    })
+    .filter((name): name is string => Boolean(name));
+
+  const attachmentsRaw = Array.isArray(post.attachments)
+    ? post.attachments
+    : [];
+
+  const attachments = attachmentsRaw
+    .map((attachment) => {
+      if (!attachment || typeof attachment !== 'object') return undefined;
+      const a = attachment as Record<string, unknown>;
+
+      if (typeof a.name === 'string') return a.name;
+
+      const file = a.file;
+      if (file && typeof file === 'object') {
+        const f = file as Record<string, unknown>;
+        if (typeof f.name === 'string') return f.name;
+      }
+
+      return undefined;
+    })
+    .filter((name): name is string => Boolean(name));
+
+  const text =
+    htmlToText(content?.html) ??
+    (typeof post.text === 'string' ? post.text : undefined);
+
+  return {
+    id: post.id ?? post.postId,
+    ...(typeof post.title === 'string' ? { title: post.title } : {}),
+    ...(text ? { text } : {}),
+    ...(typeof post.publishAt === 'string'
+      ? { publishedAt: post.publishAt }
+      : typeof post.timestamp === 'string'
+        ? { publishedAt: post.timestamp }
+        : {}),
+    ...(typeof post.isImportant === 'boolean'
+      ? { important: post.isImportant }
+      : {}),
+    ...(typeof post.importantTo === 'string'
+      ? { importantUntil: post.importantTo }
+      : {}),
+    ...(children.length > 0 ? { children } : {}),
+    ...(groups.length > 0 ? { groups } : {}),
+    ...(typeof post._groupName === 'string'
+      ? { sourceGroup: post._groupName }
+      : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(typeof post.commentCount === 'number'
+      ? { commentCount: post.commentCount }
+      : {}),
+  };
+}
+
+function compactPostsResponse(data: unknown): unknown {
+  if (!data || typeof data !== 'object') return data;
+
+  const obj = data as Record<string, unknown>;
+  if (!Array.isArray(obj.posts)) return data;
+
+  return {
+    ...obj,
+    posts: obj.posts.map((post) =>
+      post && typeof post === 'object'
+        ? compactPost(post as Record<string, unknown>)
+        : post,
+    ),
+  };
+}
+
+function toCopenhagenIso(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Copenhagen',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+    timeZoneName: 'longOffset',
+  }).formatToParts(date);
+
+  const get = (type: string): string =>
+    parts.find((part) => part.type === type)?.value ?? '';
+
+  const offset = get('timeZoneName').replace('GMT', '') || '+00:00';
+
+  return get('year') + '-' + get('month') + '-' + get('day') +
+    'T' + get('hour') + ':' + get('minute') + ':' + get('second') + offset;
+}
+
 export function registerTools(server: McpServer, context: AulaContext): void {
   // --- aula_discover -------------------------------------------------------
 
@@ -110,7 +248,12 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         end,
         ...(args.resourceIds ? { resourceIds: args.resourceIds } : {}),
       });
-      return jsonContent(events);
+      const localizedEvents = events.map((event) => ({
+        ...event,
+        startDateTime: toCopenhagenIso(event.startDateTime),
+        endDateTime: toCopenhagenIso(event.endDateTime),
+      }));
+      return jsonContent(localizedEvents);
     },
   );
 
@@ -174,22 +317,26 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       // Mode 1: explicit single group.
       if (args.groupId !== undefined) {
         return jsonContent(
-          await client.getPosts({
-            groupId: args.groupId,
-            limit,
-            ...(args.index !== undefined ? { index: args.index } : {}),
-          }),
+          compactPostsResponse(
+            await client.getPosts({
+              groupId: args.groupId,
+              limit,
+              ...(args.index !== undefined ? { index: args.index } : {}),
+            }),
+          ),
         );
       }
 
       // Mode 2: explicit institutionProfileIds (legacy unread feed).
       if (args.institutionProfileIds?.length) {
         return jsonContent(
-          await client.getPosts({
-            institutionProfileIds: args.institutionProfileIds,
-            limit,
-            ...(args.index !== undefined ? { index: args.index } : {}),
-          }),
+          compactPostsResponse(
+            await client.getPosts({
+              institutionProfileIds: args.institutionProfileIds,
+              limit,
+              ...(args.index !== undefined ? { index: args.index } : {}),
+            }),
+          ),
         );
       }
 
@@ -257,7 +404,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       };
       merged.sort((a, b) => dateOf(b) - dateOf(a));
       return jsonContent({
-        posts: merged.slice(0, limit),
+        posts: merged.slice(0, limit).map(compactPost),
         _source: 'groups',
         _groupsQueried: groupIds.length,
         _postsFound: merged.length,
