@@ -89,15 +89,15 @@ function compactPost(post: Record<string, unknown>): Record<string, unknown> {
     ...(typeof post.title === 'string' ? { title: post.title } : {}),
     ...(text ? { text } : {}),
     ...(typeof post.publishAt === 'string'
-      ? { publishedAt: post.publishAt }
+      ? { publishedAt: toCopenhagenIso(post.publishAt) }
       : typeof post.timestamp === 'string'
-        ? { publishedAt: post.timestamp }
+        ? { publishedAt: toCopenhagenIso(post.timestamp) }
         : {}),
     ...(typeof post.isImportant === 'boolean'
       ? { important: post.isImportant }
       : {}),
     ...(typeof post.importantTo === 'string'
-      ? { importantUntil: post.importantTo }
+      ? { importantUntil: toCopenhagenIso(post.importantTo) }
       : {}),
     ...(children.length > 0 ? { children } : {}),
     ...(groups.length > 0 ? { groups } : {}),
@@ -150,6 +150,68 @@ function toCopenhagenIso(value: string): string {
 
   return get('year') + '-' + get('month') + '-' + get('day') +
     'T' + get('hour') + ':' + get('minute') + ':' + get('second') + offset;
+}
+
+function compactNotifications(data: unknown): unknown {
+  if (!Array.isArray(data)) return data;
+
+  const groupedMedia = new Map<number, {
+    type: string;
+    albumId: number;
+    count: number;
+    triggered?: string;
+  }>();
+
+  const result: Array<Record<string, unknown>> = [];
+
+  for (const item of data) {
+    if (!item || typeof item !== 'object') continue;
+
+    const n = item as Record<string, unknown>;
+    const type = typeof n.notificationEventType === 'string'
+      ? n.notificationEventType
+      : 'Unknown';
+
+    const triggered = typeof n.triggered === 'string'
+      ? toCopenhagenIso(n.triggered)
+      : undefined;
+
+    if ((type === 'NewMedia' || type === 'MediaAddedToAlbum') &&
+        typeof n.albumId === 'number') {
+      const existing = groupedMedia.get(n.albumId);
+
+      if (existing) {
+        existing.count += 1;
+        if (!existing.triggered && triggered) existing.triggered = triggered;
+      } else {
+        groupedMedia.set(n.albumId, {
+          type: 'AlbumActivity',
+          albumId: n.albumId,
+          count: 1,
+          ...(triggered ? { triggered } : {}),
+        });
+      }
+
+      continue;
+    }
+
+    result.push({
+      type,
+      ...(typeof n.postTitle === 'string' ? { title: n.postTitle } : {}),
+      ...(typeof n.postId === 'number' ? { postId: n.postId } : {}),
+      ...(typeof n.albumName === 'string' ? { albumName: n.albumName } : {}),
+      ...(typeof n.albumId === 'number' ? { albumId: n.albumId } : {}),
+      ...(typeof n.relatedChildName === 'string'
+        ? { child: n.relatedChildName }
+        : {}),
+      ...(triggered ? { triggered } : {}),
+    });
+  }
+
+  return [
+    ...result,
+    ...Array.from(groupedMedia.values()),
+  ];
 }
 
 export function registerTools(server: McpServer, context: AulaContext): void {
@@ -268,7 +330,9 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
     async () => {
       const client = await context.getClient();
-      return jsonContent(await client.getNotifications());
+      return jsonContent(
+        compactNotifications(await client.getNotifications()),
+      );
     },
   );
 
