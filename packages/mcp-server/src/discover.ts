@@ -243,8 +243,10 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
       tools: ['aula_notifications_list'],
     },
     posts: {
-      summary: 'Class-level news / posts feed (teacher updates).',
-      tools: ['aula_posts_list'],
+      summary: 'Class-level news / posts feed (teacher updates), including readable attachments.',
+      tools: ['aula_posts_list', 'aula_attachment_read'],
+      notes:
+        'When a relevant post refers to an attachment and the attachment content is needed to answer the user, call aula_attachment_read with the postId and attachmentId returned by aula_posts_list.',
     },
     ugeplan: {
       summary:
