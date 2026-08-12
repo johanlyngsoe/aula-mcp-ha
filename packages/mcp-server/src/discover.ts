@@ -246,9 +246,9 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
     },
     posts: {
       summary: 'Class-level news / posts feed (teacher updates), including readable attachments.',
-      tools: ['aula_posts_list', 'aula_attachment_read'],
+      tools: ['aula_posts_search', 'aula_posts_list', 'aula_attachment_read'],
       notes:
-        'When a relevant post has a readable attachment and the attachment content is needed, call aula_posts_list again with that exact postId and includeAttachmentText=true. Use the returned attachment.text to answer. Do not use aula_messages_get_thread for posts, and do not ask the user to open the attachment themselves when includeAttachmentText can read it.',
+        'When the user refers to a post by title, topic or wording, prefer aula_posts_search. It searches across all accessible groups and reads supported attachments directly by default. Use attachment.text from the returned matching post when answering. Use aula_posts_list for browsing the general feed. Never use aula_messages_get_thread for Aula posts.',
     },
     ugeplan: {
       summary:

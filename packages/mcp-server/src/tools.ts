@@ -743,6 +743,290 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
   );
 
+  // --- aula_posts_search ---------------------------------------------------
+
+  server.registerTool(
+    'aula_posts_search',
+    {
+      title: 'Search Aula posts',
+      description:
+        'Search read and unread Aula posts across all groups available to the guardian. ' +
+        'Use this when the user refers to a post by title, topic or wording. Returns only ' +
+        'the best matching posts instead of the full feed. By default readable PDF/DOCX/TXT ' +
+        'attachments on matching posts are parsed and included directly as attachment.text.',
+      inputSchema: {
+        query: z
+          .string()
+          .min(2)
+          .describe(
+            'Words or title text to search for, e.g. "medbringe materialer næste uge".',
+          ),
+        includeAttachmentText: z
+          .boolean()
+          .optional()
+          .describe(
+            'Parse readable PDF/DOCX/TXT attachments on matching posts. Defaults to true.',
+          ),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(10)
+          .optional()
+          .describe('Maximum number of matching posts to return. Defaults to 5.'),
+      },
+    },
+    async (args) => {
+      const client = await context.getClient();
+      const [groupIds, groupMeta] = await Promise.all([
+        context.getGroupIds(),
+        context.getGroupMeta(),
+      ]);
+
+      if (groupIds.length === 0) {
+        return jsonContent({
+          query: args.query,
+          posts: [],
+          _note:
+            'No groups discovered from profileContext.institutions[].groups + municipalGroups.',
+        });
+      }
+
+      const seen = new Set<number>();
+      const merged: Array<
+        Record<string, unknown> & {
+          _groupId: number;
+          _institutionCode?: string;
+          _institutionName?: string;
+          _groupName?: string;
+        }
+      > = [];
+      const errors: Array<{ groupId: number; error: string }> = [];
+
+      await Promise.all(
+        groupIds.map(async (gid) => {
+          try {
+            const raw = (await client.getPosts({
+              groupId: gid,
+              limit: 50,
+            })) as {
+              posts?: Array<Record<string, unknown>>;
+            };
+
+            const meta = groupMeta.get(gid);
+
+            for (const post of raw.posts ?? []) {
+              const idValue = post.id ?? post.postId;
+              const id =
+                typeof idValue === 'number'
+                  ? idValue
+                  : Number(idValue);
+
+              if (!Number.isFinite(id) || seen.has(id)) continue;
+
+              seen.add(id);
+
+              merged.push({
+                ...post,
+                _groupId: gid,
+                ...(meta?.institutionCode
+                  ? { _institutionCode: meta.institutionCode }
+                  : {}),
+                ...(meta?.institutionName
+                  ? { _institutionName: meta.institutionName }
+                  : {}),
+                ...(meta?.name
+                  ? { _groupName: meta.name }
+                  : {}),
+              });
+            }
+          } catch (error) {
+            errors.push({
+              groupId: gid,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            });
+          }
+        }),
+      );
+
+      const normalizeSearch = (value: unknown): string =>
+        typeof value === 'string'
+          ? value
+              .toLocaleLowerCase('da-DK')
+              .replace(/[^\p{L}\p{N}]+/gu, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+          : '';
+
+      const query = normalizeSearch(args.query);
+      const terms = query
+        .split(' ')
+        .filter((term) => term.length >= 2);
+
+      const scored = merged
+        .map((post) => {
+          const title = normalizeSearch(post.title);
+
+          const content =
+            post.content &&
+            typeof post.content === 'object'
+              ? (post.content as { html?: unknown })
+              : undefined;
+
+          const body = normalizeSearch(
+            htmlToText(content?.html) ??
+              (typeof post.text === 'string'
+                ? post.text
+                : ''),
+          );
+
+          let score = 0;
+
+          if (title === query) score += 200;
+          else if (title.includes(query)) score += 120;
+
+          if (body.includes(query)) score += 60;
+
+          for (const term of terms) {
+            if (title.includes(term)) score += 20;
+            if (body.includes(term)) score += 5;
+          }
+
+          const dateRaw =
+            (post.publishAt as string | undefined) ??
+            (post.timestamp as string | undefined) ??
+            (post.createdAt as string | undefined) ??
+            (post.publishDate as string | undefined);
+
+          const timestamp = dateRaw
+            ? Date.parse(dateRaw)
+            : 0;
+
+          return {
+            post,
+            score,
+            timestamp,
+          };
+        })
+        .filter((item) => item.score > 0)
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            b.timestamp - a.timestamp,
+        );
+
+      const selected = scored
+        .slice(0, args.limit ?? 5)
+        .map((item) => item.post);
+
+      const compactedPosts = selected.map(compactPost);
+
+      if (args.includeAttachmentText ?? true) {
+        await Promise.all(
+          selected.map(async (rawPost, postIndex) => {
+            const compactedPost = compactedPosts[postIndex];
+
+            const rawAttachments = Array.isArray(rawPost.attachments)
+              ? rawPost.attachments
+              : [];
+
+            const compactAttachments = Array.isArray(
+              compactedPost.attachments,
+            )
+              ? (compactedPost.attachments as Array<
+                  Record<string, unknown>
+                >)
+              : [];
+
+            await Promise.all(
+              rawAttachments.map(async (rawAttachment) => {
+                if (
+                  !rawAttachment ||
+                  typeof rawAttachment !== 'object'
+                ) {
+                  return;
+                }
+
+                const attachment =
+                  rawAttachment as Record<string, unknown>;
+
+                const fileObject =
+                  attachment.file &&
+                  typeof attachment.file === 'object'
+                    ? (attachment.file as Record<
+                        string,
+                        unknown
+                      >)
+                    : undefined;
+
+                const attachmentIdRaw =
+                  attachment.id ?? fileObject?.id;
+
+                const attachmentId =
+                  typeof attachmentIdRaw === 'number'
+                    ? attachmentIdRaw
+                    : Number(attachmentIdRaw);
+
+                if (!Number.isFinite(attachmentId)) return;
+
+                const compactAttachment =
+                  compactAttachments.find(
+                    (candidate) =>
+                      Number(candidate.id) ===
+                      attachmentId,
+                  );
+
+                if (
+                  !compactAttachment ||
+                  compactAttachment.readable !== true
+                ) {
+                  return;
+                }
+
+                const name =
+                  typeof attachment.name === 'string'
+                    ? attachment.name
+                    : typeof fileObject?.name === 'string'
+                      ? fileObject.name
+                      : `attachment-${attachmentId}`;
+
+                const url =
+                  typeof fileObject?.url === 'string'
+                    ? fileObject.url
+                    : undefined;
+
+                if (!url) {
+                  compactAttachment.readError =
+                    'Attachment has no downloadable file URL';
+                  return;
+                }
+
+                Object.assign(
+                  compactAttachment,
+                  await parseAttachmentFile(name, url),
+                );
+              }),
+            );
+          }),
+        );
+      }
+
+      return jsonContent({
+        query: args.query,
+        posts: compactedPosts,
+        _groupsQueried: groupIds.length,
+        _postsScanned: merged.length,
+        _matchesFound: scored.length,
+        ...(errors.length > 0
+          ? { _errors: errors }
+          : {}),
+      });
+    },
+  );
+
   // --- aula_attachment_read ------------------------------------------------
 
   server.registerTool(
