@@ -122,12 +122,35 @@ function compactPost(post: Record<string, unknown>): Record<string, unknown> {
         return undefined;
       }
 
-      return { id, name };
+      const postIdRaw = post.id ?? post.postId;
+      const postId =
+        typeof postIdRaw === 'number'
+          ? postIdRaw
+          : Number(postIdRaw);
+
+      if (!Number.isFinite(postId)) {
+        return { id, name };
+      }
+
+      const extension = extname(name).toLowerCase();
+      const readable = ['.pdf', '.docx', '.txt'].includes(extension);
+
+      return {
+        id,
+        name,
+        readable,
+        ...(readable
+          ? {
+              readWith: {
+                tool: 'aula_attachment_read',
+                postId,
+                attachmentId: id,
+              },
+            }
+          : {}),
+      };
     })
-    .filter(
-      (attachment): attachment is { id: number; name: string } =>
-        Boolean(attachment),
-    );
+    .filter((attachment) => Boolean(attachment));
 
   const text =
     htmlToText(content?.html) ??
@@ -394,19 +417,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       description:
         'Teacher posts and class-level updates — the "Opslag" feed in the Aula app, ' +
         'including read posts. By default fans out across every group the guardian ' +
-        'has access to (parent=group&groupId=<N>) and merges results, sorted newest ' +
-        'first. Pass `groupId` to narrow to one group, or `institutionProfileIds` to ' +
-        'use the legacy unread-only feed.',
+        'has access to and merges results, sorted newest first. Attachments that can ' +
+        'be read by aula_attachment_read include a readWith object with the exact next tool call. ' +
+        'Pass `institutionProfileIds` only to use the legacy unread-only feed.',
       inputSchema: {
-        groupId: z
-          .number()
-          .int()
-          .min(1)
-          .optional()
-          .describe(
-            'Restrict to a single group (from profileContext.institutions[].groups[].id). ' +
-              'Omit to fan out across all groups.',
-          ),
         institutionProfileIds: z
           .array(z.number().int().min(1))
           .min(1)
@@ -427,20 +441,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       const client = await context.getClient();
       const limit = args.limit ?? 20;
 
-      // Mode 1: explicit single group.
-      if (args.groupId !== undefined) {
-        return jsonContent(
-          compactPostsResponse(
-            await client.getPosts({
-              groupId: args.groupId,
-              limit,
-              ...(args.index !== undefined ? { index: args.index } : {}),
-            }),
-          ),
-        );
-      }
-
-      // Mode 2: explicit institutionProfileIds (legacy unread feed).
+      // Mode 1: explicit institutionProfileIds (legacy unread feed).
       if (args.institutionProfileIds?.length) {
         return jsonContent(
           compactPostsResponse(
@@ -453,7 +454,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         );
       }
 
-      // Mode 3 (default): fan out across all groups, merge, dedupe by id,
+      // Mode 2 (default): fan out across all groups, merge, dedupe by id,
       // sort newest first. This is the only mode that returns already-read
       // posts — Aula's institutionProfile-scoped feed only ever shows unread.
       const [groupIds, groupMeta] = await Promise.all([
