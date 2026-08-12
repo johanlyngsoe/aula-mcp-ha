@@ -535,7 +535,9 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       title: 'Read Aula attachment',
       description:
         'Download and extract text from an attachment belonging to an Aula post. ' +
-        'Use postId + attachmentId from aula_posts_list. Supports PDF, DOCX and TXT. ' +
+        'When aula_posts_list returns an attachment with readable=true and a readWith object, ' +
+        'use this tool and pass exactly readWith.postId and readWith.attachmentId. Do not use ' +
+        'aula_messages_get_thread for post attachments. Supports PDF, DOCX and TXT. ' +
         'Signed download URLs are used internally and are never returned.',
       inputSchema: {
         postId: z.number().int().min(1),
@@ -970,7 +972,9 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     {
       title: 'Read a single thread',
       description:
-        'Returns subject + every message in the thread. If the thread is sensitive, ' +
+        'Returns subject + every message in the thread. Only use threadId values returned by ' +
+        'aula_messages_list_threads. IDs returned by aula_posts_list are Aula post IDs, not ' +
+        'message thread IDs, and must never be passed to this tool. If the thread is sensitive, ' +
         'this tool returns an error code that means the user must MitID step-up to read it ' +
         '(currently a fresh `aula login` from the CLI).',
       inputSchema: {
