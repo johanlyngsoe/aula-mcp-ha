@@ -50,6 +50,120 @@ function truncateAttachmentText(value: string): {
   };
 }
 
+type ParsedAttachment = {
+  format?: 'pdf' | 'docx' | 'txt';
+  text?: string;
+  truncated?: boolean;
+  ocrRequired?: boolean;
+  readError?: string;
+};
+
+async function parseAttachmentFile(
+  name: string,
+  url: string,
+): Promise<ParsedAttachment> {
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return {
+        readError: `Attachment download failed with HTTP ${response.status}`,
+      };
+    }
+
+    const declaredLength = Number(
+      response.headers.get('content-length') ?? 0,
+    );
+
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > MAX_ATTACHMENT_BYTES
+    ) {
+      return {
+        readError: `Attachment exceeds maximum supported size (${MAX_ATTACHMENT_BYTES} bytes)`,
+      };
+    }
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+
+    if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+      return {
+        readError: `Attachment exceeds maximum supported size (${MAX_ATTACHMENT_BYTES} bytes)`,
+      };
+    }
+
+    const extension = extname(name).toLowerCase();
+    let extractedText = '';
+    let format: 'pdf' | 'docx' | 'txt';
+
+    if (extension === '.pdf') {
+      format = 'pdf';
+
+      const workDir = await mkdtemp(
+        join(tmpdir(), 'aula-attachment-'),
+      );
+      const inputFile = join(workDir, 'input.pdf');
+      const outputFile = join(workDir, 'output.txt');
+
+      try {
+        await writeFile(inputFile, bytes);
+
+        await execFileAsync(
+          'pdftotext',
+          ['-layout', '-enc', 'UTF-8', inputFile, outputFile],
+          {
+            maxBuffer: 2 * 1024 * 1024,
+          },
+        );
+
+        extractedText = await readFile(outputFile, 'utf8');
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    } else if (extension === '.docx') {
+      format = 'docx';
+
+      const result = await mammoth.extractRawText({
+        buffer: bytes,
+      });
+
+      extractedText = result.value;
+    } else if (extension === '.txt') {
+      format = 'txt';
+      extractedText = bytes.toString('utf8');
+    } else {
+      return {
+        readError: 'Unsupported attachment type',
+      };
+    }
+
+    const normalizedText = normalizeAttachmentText(extractedText);
+
+    if (format === 'pdf' && normalizedText.length < 20) {
+      return {
+        format,
+        text: normalizedText,
+        truncated: false,
+        ocrRequired: true,
+      };
+    }
+
+    const output = truncateAttachmentText(normalizedText);
+
+    return {
+      format,
+      text: output.text,
+      truncated: output.truncated,
+      ocrRequired: false,
+    };
+  } catch (error) {
+    return {
+      readError:
+        error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function htmlToText(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined;
 
@@ -417,9 +531,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       description:
         'Teacher posts and class-level updates — the "Opslag" feed in the Aula app, ' +
         'including read posts. By default fans out across every group the guardian ' +
-        'has access to and merges results, sorted newest first. Attachments that can ' +
-        'be read by aula_attachment_read include a readWith object with the exact next tool call. ' +
-        'Pass `institutionProfileIds` only to use the legacy unread-only feed.',
+        'has access to and merges results, sorted newest first. To inspect one specific post ' +
+        'and read its PDF/DOCX/TXT attachments in the same call, pass that postId together ' +
+        'with includeAttachmentText=true. Pass `institutionProfileIds` only to use the ' +
+        'legacy unread-only feed.',
       inputSchema: {
         institutionProfileIds: z
           .array(z.number().int().min(1))
@@ -428,6 +543,20 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           .describe(
             'Legacy unread-only feed (advances profileLastSeenPostDate on every call). ' +
               'Prefer the default group fan-out unless you specifically want unread state.',
+          ),
+        postId: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe(
+            'Return only this Aula post id. Use a post id previously returned by aula_posts_list.',
+          ),
+        includeAttachmentText: z
+          .boolean()
+          .optional()
+          .describe(
+            'When true, parse readable PDF/DOCX/TXT attachments directly into the returned post. Requires postId.',
           ),
         limit: z.number().int().min(1).max(50).optional(),
         index: z
@@ -440,6 +569,14 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     async (args) => {
       const client = await context.getClient();
       const limit = args.limit ?? 20;
+
+      if (args.includeAttachmentText && args.postId === undefined) {
+        return jsonContent({
+          error: 'includeAttachmentText requires postId',
+          note:
+            'First find the post with aula_posts_list, then call aula_posts_list again with that postId and includeAttachmentText=true.',
+        });
+      }
 
       // Mode 1: explicit institutionProfileIds (legacy unread feed).
       if (args.institutionProfileIds?.length) {
@@ -517,11 +654,90 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return raw ? Date.parse(raw) : 0;
       };
       merged.sort((a, b) => dateOf(b) - dateOf(a));
+
+      const selectedPosts =
+        args.postId !== undefined
+          ? merged.filter((post) => {
+              const idValue = post.id ?? post.postId;
+              return Number(idValue) === args.postId;
+            })
+          : merged.slice(0, limit);
+
+      const compactedPosts = selectedPosts.map(compactPost);
+
+      if (args.includeAttachmentText) {
+        await Promise.all(
+          selectedPosts.map(async (rawPost, postIndex) => {
+            const compactedPost = compactedPosts[postIndex];
+            const rawAttachments = Array.isArray(rawPost.attachments)
+              ? rawPost.attachments
+              : [];
+
+            const compactAttachments = Array.isArray(compactedPost.attachments)
+              ? (compactedPost.attachments as Array<Record<string, unknown>>)
+              : [];
+
+            await Promise.all(
+              rawAttachments.map(async (rawAttachment) => {
+                if (!rawAttachment || typeof rawAttachment !== 'object') return;
+
+                const attachment = rawAttachment as Record<string, unknown>;
+                const fileObject =
+                  attachment.file && typeof attachment.file === 'object'
+                    ? (attachment.file as Record<string, unknown>)
+                    : undefined;
+
+                const attachmentIdRaw =
+                  attachment.id ?? fileObject?.id;
+                const attachmentId =
+                  typeof attachmentIdRaw === 'number'
+                    ? attachmentIdRaw
+                    : Number(attachmentIdRaw);
+
+                if (!Number.isFinite(attachmentId)) return;
+
+                const compactAttachment = compactAttachments.find(
+                  (candidate) => Number(candidate.id) === attachmentId,
+                );
+
+                if (!compactAttachment || compactAttachment.readable !== true) {
+                  return;
+                }
+
+                const name =
+                  typeof attachment.name === 'string'
+                    ? attachment.name
+                    : typeof fileObject?.name === 'string'
+                      ? fileObject.name
+                      : `attachment-${attachmentId}`;
+
+                const url =
+                  typeof fileObject?.url === 'string'
+                    ? fileObject.url
+                    : undefined;
+
+                if (!url) {
+                  compactAttachment.readError =
+                    'Attachment has no downloadable file URL';
+                  return;
+                }
+
+                const parsed = await parseAttachmentFile(name, url);
+                Object.assign(compactAttachment, parsed);
+              }),
+            );
+          }),
+        );
+      }
+
       return jsonContent({
-        posts: merged.slice(0, limit).map(compactPost),
+        posts: compactedPosts,
         _source: 'groups',
         _groupsQueried: groupIds.length,
         _postsFound: merged.length,
+        ...(args.postId !== undefined && compactedPosts.length === 0
+          ? { _note: `Post ${args.postId} was not found in the fetched group history.` }
+          : {}),
         ...(errors.length > 0 ? { _errors: errors } : {}),
       });
     },
@@ -628,116 +844,13 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         });
       }
 
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        return jsonContent({
-          error: `Attachment download failed with HTTP ${response.status}`,
-          postId: args.postId,
-          attachmentId: args.attachmentId,
-          name,
-        });
-      }
-
-      const declaredLength = Number(response.headers.get('content-length') ?? 0);
-
-      if (
-        Number.isFinite(declaredLength) &&
-        declaredLength > MAX_ATTACHMENT_BYTES
-      ) {
-        return jsonContent({
-          error: 'Attachment exceeds maximum supported size',
-          postId: args.postId,
-          attachmentId: args.attachmentId,
-          name,
-          maxBytes: MAX_ATTACHMENT_BYTES,
-        });
-      }
-
-      const bytes = Buffer.from(await response.arrayBuffer());
-
-      if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-        return jsonContent({
-          error: 'Attachment exceeds maximum supported size',
-          postId: args.postId,
-          attachmentId: args.attachmentId,
-          name,
-          maxBytes: MAX_ATTACHMENT_BYTES,
-        });
-      }
-
-      const extension = extname(name).toLowerCase();
-      let extractedText = '';
-      let format: 'pdf' | 'docx' | 'txt';
-
-      if (extension === '.pdf') {
-        format = 'pdf';
-
-        const workDir = await mkdtemp(join(tmpdir(), 'aula-attachment-'));
-        const inputFile = join(workDir, 'input.pdf');
-        const outputFile = join(workDir, 'output.txt');
-
-        try {
-          await writeFile(inputFile, bytes);
-
-          await execFileAsync(
-            'pdftotext',
-            ['-layout', '-enc', 'UTF-8', inputFile, outputFile],
-            {
-              maxBuffer: 2 * 1024 * 1024,
-            },
-          );
-
-          extractedText = await readFile(outputFile, 'utf8');
-        } finally {
-          await rm(workDir, { recursive: true, force: true });
-        }
-      } else if (extension === '.docx') {
-        format = 'docx';
-
-        const result = await mammoth.extractRawText({
-          buffer: bytes,
-        });
-
-        extractedText = result.value;
-      } else if (extension === '.txt') {
-        format = 'txt';
-        extractedText = bytes.toString('utf8');
-      } else {
-        return jsonContent({
-          error: 'Unsupported attachment type',
-          postId: args.postId,
-          attachmentId: args.attachmentId,
-          name,
-          supportedTypes: ['pdf', 'docx', 'txt'],
-        });
-      }
-
-      const normalizedText = normalizeAttachmentText(extractedText);
-
-      if (format === 'pdf' && normalizedText.length < 20) {
-        return jsonContent({
-          postId: args.postId,
-          attachmentId: args.attachmentId,
-          name,
-          format,
-          text: normalizedText,
-          ocrRequired: true,
-          note:
-            'The PDF contains little or no extractable text and may be scanned or image-based.',
-        });
-      }
-
-      const output = truncateAttachmentText(normalizedText);
+      const parsed = await parseAttachmentFile(name, url);
 
       return jsonContent({
         postId: args.postId,
         attachmentId: args.attachmentId,
         name,
-        format,
-        text: output.text,
-        truncated: output.truncated,
-        ocrRequired: false,
+        ...parsed,
       });
     },
   );

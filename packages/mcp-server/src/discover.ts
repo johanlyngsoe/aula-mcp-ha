@@ -248,7 +248,7 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
       summary: 'Class-level news / posts feed (teacher updates), including readable attachments.',
       tools: ['aula_posts_list', 'aula_attachment_read'],
       notes:
-        'If a relevant post has an attachment and the user\'s question may be answered by that attachment, you MUST call aula_attachment_read before answering. Do not tell the user to open or check the attachment themselves when aula_attachment_read can read it. Use the postId and attachmentId returned by aula_posts_list.',
+        'When a relevant post has a readable attachment and the attachment content is needed, call aula_posts_list again with that exact postId and includeAttachmentText=true. Use the returned attachment.text to answer. Do not use aula_messages_get_thread for posts, and do not ask the user to open the attachment themselves when includeAttachmentText can read it.',
     },
     ugeplan: {
       summary:
