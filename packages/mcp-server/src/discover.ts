@@ -48,8 +48,9 @@ export interface DiscoverManifest {
   };
   children: DiscoveredChild[];
   /** Guardian's institutionProfile.id per school (the parent's profile at
-   *  each institution they're registered at). Required by `aula_posts_list`
-   *  as `institutionProfileIds[]`. Distinct from `children[].institution.id`. */
+   *  each institution they're registered at). Used only for the legacy
+   *  unread-only `aula_posts_list` mode. Distinct from
+   *  `children[].institution.id`. */
   institutionProfileIds: number[];
   apiVersion: number;
   tokens: {
@@ -172,7 +173,7 @@ export async function buildDiscoverManifest(context: AulaContext): Promise<Disco
         "Use children[].institution.id for profileIds on calendar.events — the CHILD's institution-profile id, NOT child.id. " +
         'Use children[].institution.code for institutionCodes (ugeplan, opgaver, ugebrev, huskelisten, lektier). ' +
         'Use children[].userId only as sessionId/sessionUUID when a third-party integration explicitly asks for it. ' +
-        "For aula_posts_list, pass institutionProfileIds (top-level field on this manifest — the GUARDIAN's profile ids per school, distinct from children[].institution.id). It defaults to all of them when omitted, so usually you can leave it off.",
+        'For aula_posts_list, omit institutionProfileIds by default. This makes the tool search all accessible groups and includes already-read posts. Only pass institutionProfileIds when the user explicitly asks for the legacy unread-only feed.',
       pickOne:
         'For ugeplan/ugebrev/opgaver/huskelisten, call only capabilities[area].tools[0] — that is the provider this user actually has. Skip alternates unless the first errors.',
       timeWindows:
