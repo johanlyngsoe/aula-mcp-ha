@@ -173,7 +173,8 @@ export async function buildDiscoverManifest(context: AulaContext): Promise<Disco
         "Use children[].institution.id for profileIds on calendar.events — the CHILD's institution-profile id, NOT child.id. " +
         'Use children[].institution.code for institutionCodes (ugeplan, opgaver, ugebrev, huskelisten, lektier). ' +
         'Use children[].userId only as sessionId/sessionUUID when a third-party integration explicitly asks for it. ' +
-        'For aula_posts_list, omit institutionProfileIds by default. This makes the tool search all accessible groups and includes already-read posts. Only pass institutionProfileIds when the user explicitly asks for the legacy unread-only feed.',
+        'Never use children[].id or children[].institution.id as groupId for aula_posts_list. ' +
+        'For aula_posts_list, omit groupId and institutionProfileIds by default. This makes the tool search all accessible groups and includes already-read posts. Only pass groupId when you have a real Aula group id returned by the profile context, and only pass institutionProfileIds when the user explicitly asks for the legacy unread-only feed.',
       pickOne:
         'For ugeplan/ugebrev/opgaver/huskelisten, call only capabilities[area].tools[0] — that is the provider this user actually has. Skip alternates unless the first errors.',
       timeWindows:
@@ -247,7 +248,7 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
       summary: 'Class-level news / posts feed (teacher updates), including readable attachments.',
       tools: ['aula_posts_list', 'aula_attachment_read'],
       notes:
-        'When a relevant post refers to an attachment and the attachment content is needed to answer the user, call aula_attachment_read with the postId and attachmentId returned by aula_posts_list.',
+        'If a relevant post has an attachment and the user\'s question may be answered by that attachment, you MUST call aula_attachment_read before answering. Do not tell the user to open or check the attachment themselves when aula_attachment_read can read it. Use the postId and attachmentId returned by aula_posts_list.',
     },
     ugeplan: {
       summary:
