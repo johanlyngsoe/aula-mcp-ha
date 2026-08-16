@@ -1163,6 +1163,209 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     );
   }
 
+
+  // --- aula_attention_context -----------------------------------------------
+
+  server.registerTool(
+    'aula_attention_context',
+    {
+      title: 'Aula attention context',
+      description:
+        'Build a deterministic compact context for family attention summaries. ' +
+        'Returns today/tomorrow school schedule for every discovered child, recent posts ' +
+        'with child/group metadata, and recent message-thread metadata. Use this instead ' +
+        'of independently discovering data for each child when building a family dashboard summary.',
+      inputSchema: {
+        postLimit: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .optional()
+          .describe('Maximum number of recent posts to include. Defaults to 30.'),
+        messageLimit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe('Maximum number of recent message threads to include. Defaults to 30.'),
+      },
+    },
+    async (args) => {
+      const client = await context.getClient();
+
+      const discover = await buildDiscoverManifest(context);
+
+      const children = Array.isArray(discover.children)
+        ? discover.children
+        : [];
+
+      const schedule = await Promise.all(
+        children.map(async (child) => {
+          const profileId = child.institution?.id;
+
+          if (typeof profileId !== 'number') {
+            return {
+              id: child.id,
+              name: child.name,
+              today: [],
+              tomorrow: [],
+              error: 'Missing child institution profile id',
+            };
+          }
+
+          const todayRange = resolveCalendarRange('today');
+          const tomorrowRange = resolveCalendarRange('tomorrow');
+
+          const [todayEvents, tomorrowEvents] = await Promise.all([
+            client.getCalendarEvents({
+              profileIds: [profileId],
+              start: todayRange.start,
+              end: todayRange.end,
+            }),
+            client.getCalendarEvents({
+              profileIds: [profileId],
+              start: tomorrowRange.start,
+              end: tomorrowRange.end,
+            }),
+          ]);
+
+          const localize = (events: Awaited<ReturnType<typeof client.getCalendarEvents>>) =>
+            events.map((event) => ({
+              ...event,
+              startDateTime: toCopenhagenIso(event.startDateTime),
+              endDateTime: toCopenhagenIso(event.endDateTime),
+            }));
+
+          return {
+            id: child.id,
+            name: child.name,
+            today: localize(todayEvents),
+            tomorrow: localize(tomorrowEvents),
+          };
+        }),
+      );
+
+      const postLimit = args.postLimit ?? 30;
+
+      const [groupIds, groupMeta] = await Promise.all([
+        context.getGroupIds(),
+        context.getGroupMeta(),
+      ]);
+
+      const seen = new Set<number>();
+      const mergedPosts: Array<Record<string, unknown>> = [];
+      const postErrors: Array<{ groupId: number; error: string }> = [];
+
+      await Promise.all(
+        groupIds.map(async (groupId) => {
+          try {
+            const raw = (await client.getPosts({
+              groupId,
+              limit: Math.max(postLimit, 20),
+            })) as {
+              posts?: Array<Record<string, unknown>>;
+            };
+
+            const meta = groupMeta.get(groupId);
+
+            for (const post of raw.posts ?? []) {
+              const idValue = post.id ?? post.postId;
+              const id =
+                typeof idValue === 'number'
+                  ? idValue
+                  : Number(idValue);
+
+              if (!Number.isFinite(id) || seen.has(id)) continue;
+
+              seen.add(id);
+
+              mergedPosts.push({
+                ...post,
+                _groupId: groupId,
+                ...(meta?.institutionCode
+                  ? { _institutionCode: meta.institutionCode }
+                  : {}),
+                ...(meta?.institutionName
+                  ? { _institutionName: meta.institutionName }
+                  : {}),
+                ...(meta?.name
+                  ? { _groupName: meta.name }
+                  : {}),
+              });
+            }
+          } catch (error) {
+            postErrors.push({
+              groupId,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            });
+          }
+        }),
+      );
+
+      const dateOf = (post: Record<string, unknown>): number => {
+        const raw =
+          (post.publishAt as string | undefined) ??
+          (post.timestamp as string | undefined) ??
+          (post.createdAt as string | undefined) ??
+          (post.publishDate as string | undefined);
+
+        return raw ? Date.parse(raw) : 0;
+      };
+
+      mergedPosts.sort((a, b) => dateOf(b) - dateOf(a));
+
+      const posts = mergedPosts
+        .slice(0, postLimit)
+        .map(compactPost);
+
+      const threads = await client.getThreads({
+        page: 0,
+        pageSize: args.messageLimit ?? 30,
+      });
+
+      const messages = threads.map((thread) => ({
+        id: thread.id,
+        read: thread.read,
+        ...(thread.subject
+          ? { subject: thread.subject }
+          : {}),
+        ...(thread.lastMessage?.sendDateTime
+          ? {
+              lastMessageDate: toCopenhagenIso(
+                thread.lastMessage.sendDateTime,
+              ),
+            }
+          : {}),
+        ...(thread.lastMessage?.sender?.fullName
+          ? {
+              lastSender:
+                thread.lastMessage.sender.fullName,
+            }
+          : {}),
+      }));
+
+      return jsonContent({
+        children: schedule,
+        posts,
+        messages,
+        _meta: {
+          groupsQueried: groupIds.length,
+          postsFound: mergedPosts.length,
+          postLimit,
+          messageLimit: args.messageLimit ?? 30,
+          ...(postErrors.length > 0
+            ? { postErrors }
+            : {}),
+        },
+      });
+    },
+  );
+
   // --- aula_messages_list_threads ------------------------------------------
 
   server.registerTool(

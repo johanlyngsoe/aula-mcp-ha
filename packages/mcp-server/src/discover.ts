@@ -246,9 +246,14 @@ function buildCapabilities(detectedWidgets: string[]): Record<string, Discovered
     },
     posts: {
       summary: 'Class-level news / posts feed (teacher updates), including readable attachments.',
-      tools: ['aula_posts_search', 'aula_posts_list', 'aula_attachment_read'],
+      tools: [
+        'aula_attention_context',
+        'aula_posts_search',
+        'aula_posts_list',
+        'aula_attachment_read',
+      ],
       notes:
-        'When the user refers to a post by title, topic or wording, prefer aula_posts_search. It searches across all accessible groups and reads supported attachments directly by default. Use attachment.text from the returned matching post when answering. Use aula_posts_list for browsing the general feed. Never use aula_messages_get_thread for Aula posts.',
+        'For family dashboards and practical attention summaries that must consider both children, school schedule, posts and recent message threads, use aula_attention_context first. It deterministically returns today/tomorrow schedule for every discovered child plus recent posts with child/group metadata and recent message-thread metadata. For a specific post by title, topic or wording, use aula_posts_search. Use aula_posts_list for browsing the general feed. Never use aula_messages_get_thread for Aula posts.',
     },
     ugeplan: {
       summary:
