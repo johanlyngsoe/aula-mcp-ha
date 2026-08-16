@@ -1252,7 +1252,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             }),
           ]);
 
-          const localize = (
+          const compactCalendarEvents = (
             events: Awaited<
               ReturnType<typeof client.getCalendarEvents>
             >,
@@ -1260,17 +1260,22 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             const seenEvents = new Set<string>();
 
             return events
-              .map((event) => ({
-                ...event,
-                startDateTime: toCopenhagenIso(
+              .map((event) => {
+                const start = toCopenhagenIso(
                   event.startDateTime,
-                ),
-                endDateTime: toCopenhagenIso(
+                );
+                const end = toCopenhagenIso(
                   event.endDateTime,
-                ),
-              }))
+                );
+
+                return {
+                  title: event.title,
+                  start,
+                  end,
+                };
+              })
               .filter((event) => {
-                const key = JSON.stringify(event);
+                const key = `${event.title ?? ''}|${event.start}|${event.end}`;
 
                 if (seenEvents.has(key)) {
                   return false;
@@ -1278,15 +1283,19 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
                 seenEvents.add(key);
                 return true;
-              });
+              })
+              .sort(
+                (a, b) =>
+                  Date.parse(a.start) - Date.parse(b.start),
+              );
           };
 
           return {
             id: child.id,
             name: child.name,
-            today: localize(todayEvents),
-            tomorrow: localize(tomorrowEvents),
-            next14Days: localize(next14DaysEvents),
+            today: compactCalendarEvents(todayEvents),
+            tomorrow: compactCalendarEvents(tomorrowEvents),
+            next14Days: compactCalendarEvents(next14DaysEvents),
           };
         }),
       );
@@ -1363,9 +1372,50 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       mergedPosts.sort((a, b) => dateOf(b) - dateOf(a));
 
-      const posts = mergedPosts
+      const compactedPosts = mergedPosts
         .slice(0, postLimit)
         .map(compactPost);
+
+      const childNames = children
+        .map((child) => child.name)
+        .filter(
+          (name): name is string =>
+            typeof name === 'string' && name.length > 0,
+        );
+
+      const postsByChild: Record<
+        string,
+        Array<Record<string, unknown>>
+      > = Object.fromEntries(
+        childNames.map((name) => [name, []]),
+      );
+
+      const sharedPosts: Array<Record<string, unknown>> = [];
+
+      for (const post of compactedPosts) {
+        const postChildren = Array.isArray(post.children)
+          ? post.children.filter(
+              (name): name is string =>
+                typeof name === 'string',
+            )
+          : [];
+
+        const matchedChildren = childNames.filter((name) =>
+          postChildren.includes(name),
+        );
+
+        if (matchedChildren.length === 1) {
+          postsByChild[matchedChildren[0]].push(post);
+          continue;
+        }
+
+        sharedPosts.push({
+          ...post,
+          ...(matchedChildren.length > 0
+            ? { appliesToChildren: matchedChildren }
+            : {}),
+        });
+      }
 
       const threads = await client.getThreads({
         page: 0,
@@ -1393,10 +1443,28 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           : {}),
       }));
 
+      const actionSubjectPattern =
+        /(fødselsdag|invitation|tilmeld|betaling|betal|svar|deadline|frist|tur|udflugt|møde|forældremøde|lejrskole|skolefest|arrangement)/i;
+
+      const messageActionCandidates = messages.filter((message) => {
+        const subject =
+          typeof message.subject === 'string'
+            ? message.subject
+            : '';
+
+        return actionSubjectPattern.test(subject);
+      });
+
       return jsonContent({
         children: schedule,
-        posts,
-        messages,
+        posts: {
+          byChild: postsByChild,
+          shared: sharedPosts,
+        },
+        messages: {
+          recent: messages,
+          actionCandidates: messageActionCandidates,
+        },
         _meta: {
           groupsQueried: groupIds.length,
           postsFound: mergedPosts.length,
