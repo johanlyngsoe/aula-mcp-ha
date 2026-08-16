@@ -1455,6 +1455,78 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return actionSubjectPattern.test(subject);
       });
 
+      // ------------------------------------------------------------
+      // Deterministic action candidates
+      //
+      // These candidates are intentionally conservative. They do not
+      // try to understand the full semantics of Aula content. Their
+      // purpose is to make potentially actionable sources explicit so
+      // the downstream model cannot easily overlook them.
+      // ------------------------------------------------------------
+
+      const calendarActionPattern =
+        /(idræt|svøm|svømning|tur|udflugt|museum|lejrskole|ekskursion|aqua|skolefest|arrangement|projekt)/i;
+
+      const calendarActionCandidates: Record<
+        string,
+        Array<Record<string, unknown>>
+      > = {};
+
+      for (const child of schedule) {
+        const childName =
+          typeof child.name === 'string'
+            ? child.name
+            : String(child.id ?? 'unknown');
+
+        const events = Array.isArray(child.next14Days)
+          ? child.next14Days
+          : [];
+
+        calendarActionCandidates[childName] = events.filter((event) => {
+          if (!event || typeof event !== 'object') return false;
+
+          const candidate = event as Record<string, unknown>;
+          const title =
+            typeof candidate.title === 'string'
+              ? candidate.title
+              : '';
+
+          return calendarActionPattern.test(title);
+        });
+      }
+
+      const postActionPattern =
+        /(medbring|husk|husk at|reminder|hjælp søges|skal have med|send|sende|tilmeld|tilmelding|betaling|betal|deadline|frist|svar|fødselsdag|invitation|tur|udflugt|museum|blicher|lejrskole|idræt|svøm|projekt|kæphest|materiale|mødetid|afgang|ændring|aflyst|aflysning)/i;
+
+      const isActionPost = (
+        post: Record<string, unknown>,
+      ): boolean => {
+        const title =
+          typeof post.title === 'string'
+            ? post.title
+            : '';
+
+        const body =
+          typeof post.text === 'string'
+            ? post.text
+            : '';
+
+        return postActionPattern.test(`${title}\n${body}`);
+      };
+
+      const postActionCandidatesByChild: Record<
+        string,
+        Array<Record<string, unknown>>
+      > = Object.fromEntries(
+        Object.entries(postsByChild).map(([name, posts]) => [
+          name,
+          posts.filter(isActionPost),
+        ]),
+      );
+
+      const sharedPostActionCandidates =
+        sharedPosts.filter(isActionPost);
+
       return jsonContent({
         children: schedule,
         posts: {
@@ -1464,6 +1536,14 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         messages: {
           recent: messages,
           actionCandidates: messageActionCandidates,
+        },
+        actionCandidates: {
+          calendar: calendarActionCandidates,
+          posts: {
+            byChild: postActionCandidatesByChild,
+            shared: sharedPostActionCandidates,
+          },
+          messages: messageActionCandidates,
         },
         _meta: {
           groupsQueried: groupIds.length,
