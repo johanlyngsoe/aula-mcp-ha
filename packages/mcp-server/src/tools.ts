@@ -14,7 +14,12 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import mammoth from 'mammoth';
 import { z } from 'zod';
 import type { AulaContext } from './aula-context.ts';
-import { resolveCalendarRange } from './calendar-range.ts';
+import {
+  addDays,
+  aulaTs,
+  resolveCalendarRange,
+  startOfDayCopenhagen,
+} from './calendar-range.ts';
 import { buildDiscoverManifest } from './discover.ts';
 
 function jsonContent(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
@@ -1211,6 +1216,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
               name: child.name,
               today: [],
               tomorrow: [],
+              next14Days: [],
               error: 'Missing child institution profile id',
             };
           }
@@ -1218,7 +1224,17 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           const todayRange = resolveCalendarRange('today');
           const tomorrowRange = resolveCalendarRange('tomorrow');
 
-          const [todayEvents, tomorrowEvents] = await Promise.all([
+          const fourteenDayStart = startOfDayCopenhagen(new Date());
+          const fourteenDayRange = {
+            start: aulaTs(fourteenDayStart),
+            end: aulaTs(addDays(fourteenDayStart, 14)),
+          };
+
+          const [
+            todayEvents,
+            tomorrowEvents,
+            next14DaysEvents,
+          ] = await Promise.all([
             client.getCalendarEvents({
               profileIds: [profileId],
               start: todayRange.start,
@@ -1229,13 +1245,26 @@ export function registerTools(server: McpServer, context: AulaContext): void {
               start: tomorrowRange.start,
               end: tomorrowRange.end,
             }),
+            client.getCalendarEvents({
+              profileIds: [profileId],
+              start: fourteenDayRange.start,
+              end: fourteenDayRange.end,
+            }),
           ]);
 
-          const localize = (events: Awaited<ReturnType<typeof client.getCalendarEvents>>) =>
+          const localize = (
+            events: Awaited<
+              ReturnType<typeof client.getCalendarEvents>
+            >,
+          ) =>
             events.map((event) => ({
               ...event,
-              startDateTime: toCopenhagenIso(event.startDateTime),
-              endDateTime: toCopenhagenIso(event.endDateTime),
+              startDateTime: toCopenhagenIso(
+                event.startDateTime,
+              ),
+              endDateTime: toCopenhagenIso(
+                event.endDateTime,
+              ),
             }));
 
           return {
@@ -1243,6 +1272,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             name: child.name,
             today: localize(todayEvents),
             tomorrow: localize(tomorrowEvents),
+            next14Days: localize(next14DaysEvents),
           };
         }),
       );
