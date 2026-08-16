@@ -1621,14 +1621,16 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       if (mode === 'school') {
         return jsonContent({
-          ...schoolPayload,
+          actionCandidates: schoolPayload.actionCandidates,
           _meta: meta,
         });
       }
 
       if (mode === 'messages') {
         return jsonContent({
-          ...messagePayload,
+          actionCandidates: {
+            messages: messageActionCandidates,
+          },
           _meta: meta,
         });
       }
