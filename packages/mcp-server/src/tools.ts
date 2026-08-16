@@ -1181,6 +1181,14 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         'with child/group metadata, and recent message-thread metadata. Use this instead ' +
         'of independently discovering data for each child when building a family dashboard summary.',
       inputSchema: {
+        mode: z
+          .enum(['all', 'school', 'messages'])
+          .optional()
+          .describe(
+            'Response mode. "school" returns only school/calendar/post attention data, ' +
+            '"messages" returns only message attention data, and "all" returns both. ' +
+            'Defaults to "all".',
+          ),
         postLimit: z
           .number()
           .int()
@@ -1199,6 +1207,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
     },
     async (args) => {
       const client = await context.getClient();
+      const mode = args.mode ?? 'all';
 
       const discover = await buildDiscoverManifest(context);
 
@@ -1575,15 +1584,11 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       const sharedPostActionCandidates =
         sharedPosts.filter(isActionPost);
 
-      return jsonContent({
+      const schoolPayload = {
         children: schedule,
         posts: {
           byChild: postsByChild,
           shared: sharedPosts,
-        },
-        messages: {
-          recent: messages,
-          actionCandidates: messageActionCandidates,
         },
         actionCandidates: {
           calendar: calendarActionCandidates,
@@ -1591,17 +1596,51 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             byChild: postActionCandidatesByChild,
             shared: sharedPostActionCandidates,
           },
+        },
+      };
+
+      const messagePayload = {
+        messages: {
+          recent: messages,
+          actionCandidates: messageActionCandidates,
+        },
+        actionCandidates: {
           messages: messageActionCandidates,
         },
-        _meta: {
-          groupsQueried: groupIds.length,
-          postsFound: mergedPosts.length,
-          postLimit,
-          messageLimit: args.messageLimit ?? 30,
-          ...(postErrors.length > 0
-            ? { postErrors }
-            : {}),
+      };
+
+      const meta = {
+        groupsQueried: groupIds.length,
+        postsFound: mergedPosts.length,
+        postLimit,
+        messageLimit: args.messageLimit ?? 30,
+        ...(postErrors.length > 0
+          ? { postErrors }
+          : {}),
+      };
+
+      if (mode === 'school') {
+        return jsonContent({
+          ...schoolPayload,
+          _meta: meta,
+        });
+      }
+
+      if (mode === 'messages') {
+        return jsonContent({
+          ...messagePayload,
+          _meta: meta,
+        });
+      }
+
+      return jsonContent({
+        ...schoolPayload,
+        messages: messagePayload.messages,
+        actionCandidates: {
+          ...schoolPayload.actionCandidates,
+          messages: messageActionCandidates,
         },
+        _meta: meta,
       });
     },
   );
