@@ -1465,7 +1465,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       // ------------------------------------------------------------
 
       const calendarActionPattern =
-        /(idræt|svøm|svømning|tur|udflugt|museum|lejrskole|ekskursion|aqua|skolefest|arrangement|projekt)/i;
+        /\b(idræt|svøm|svømning|tur|udflugt|museum|lejrskole|ekskursion|aqua|skolefest|arrangement|projekt)\b/i;
 
       const calendarActionCandidates: Record<
         string,
@@ -1482,17 +1482,65 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           ? child.next14Days
           : [];
 
-        calendarActionCandidates[childName] = events.filter((event) => {
-          if (!event || typeof event !== 'object') return false;
+        const candidates = events
+          .filter((event) => {
+            if (!event || typeof event !== 'object') return false;
 
-          const candidate = event as Record<string, unknown>;
+            const candidate = event as Record<string, unknown>;
+            const title =
+              typeof candidate.title === 'string'
+                ? candidate.title
+                : '';
+
+            return calendarActionPattern.test(title);
+          })
+          .map((event) => event as Record<string, unknown>)
+          .sort((a, b) => {
+            const aStart =
+              typeof a.start === 'string'
+                ? Date.parse(a.start)
+                : 0;
+            const bStart =
+              typeof b.start === 'string'
+                ? Date.parse(b.start)
+                : 0;
+
+            return aStart - bStart;
+          });
+
+        const merged: Array<Record<string, unknown>> = [];
+
+        for (const candidate of candidates) {
+          const previous = merged[merged.length - 1];
+
           const title =
             typeof candidate.title === 'string'
               ? candidate.title
               : '';
 
-          return calendarActionPattern.test(title);
-        });
+          const start =
+            typeof candidate.start === 'string'
+              ? candidate.start
+              : '';
+
+          const end =
+            typeof candidate.end === 'string'
+              ? candidate.end
+              : '';
+
+          if (
+            previous &&
+            previous.title === title &&
+            previous.end === start
+          ) {
+            previous.end = end;
+            continue;
+          }
+
+          merged.push({ ...candidate });
+        }
+
+        calendarActionCandidates[childName] = merged;
       }
 
       const postActionPattern =
