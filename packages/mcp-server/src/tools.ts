@@ -1577,7 +1577,12 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       > = Object.fromEntries(
         Object.entries(postsByChild).map(([name, posts]) => [
           name,
-          posts.filter(isActionPost),
+          posts
+            .filter(isActionPost)
+            .map((post) => ({
+              ...post,
+              appliesToChild: name,
+            })),
         ]),
       );
 
