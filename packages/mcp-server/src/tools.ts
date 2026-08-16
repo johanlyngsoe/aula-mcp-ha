@@ -1256,16 +1256,30 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             events: Awaited<
               ReturnType<typeof client.getCalendarEvents>
             >,
-          ) =>
-            events.map((event) => ({
-              ...event,
-              startDateTime: toCopenhagenIso(
-                event.startDateTime,
-              ),
-              endDateTime: toCopenhagenIso(
-                event.endDateTime,
-              ),
-            }));
+          ) => {
+            const seenEvents = new Set<string>();
+
+            return events
+              .map((event) => ({
+                ...event,
+                startDateTime: toCopenhagenIso(
+                  event.startDateTime,
+                ),
+                endDateTime: toCopenhagenIso(
+                  event.endDateTime,
+                ),
+              }))
+              .filter((event) => {
+                const key = JSON.stringify(event);
+
+                if (seenEvents.has(key)) {
+                  return false;
+                }
+
+                seenEvents.add(key);
+                return true;
+              });
+          };
 
           return {
             id: child.id,
