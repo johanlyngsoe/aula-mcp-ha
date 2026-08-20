@@ -1667,6 +1667,102 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return actionSubjectPattern.test(subject);
       });
 
+      const messageThreads = await Promise.all(
+        messageActionCandidates.map(async (candidate) => {
+          const threadId =
+            typeof candidate.id === 'number'
+              ? candidate.id
+              : Number(candidate.id);
+
+          if (!Number.isFinite(threadId)) {
+            return {
+              threadId: candidate.id,
+              subject: candidate.subject,
+              error: 'Invalid thread id',
+            };
+          }
+
+          try {
+            const thread = await client.getMessagesForThread(threadId, {
+              page: 0,
+            });
+
+            const threadRecord =
+              thread && typeof thread === 'object'
+                ? (thread as Record<string, unknown>)
+                : {};
+
+            const rawMessages = Array.isArray(threadRecord.messages)
+              ? threadRecord.messages
+              : [];
+
+            const compactMessages = rawMessages
+              .filter(
+                (message): message is Record<string, unknown> =>
+                  Boolean(message) && typeof message === 'object',
+              )
+              .map((message) => {
+                const textObject =
+                  message.text && typeof message.text === 'object'
+                    ? (message.text as Record<string, unknown>)
+                    : undefined;
+
+                const senderObject =
+                  message.sender && typeof message.sender === 'object'
+                    ? (message.sender as Record<string, unknown>)
+                    : undefined;
+
+                const html =
+                  typeof textObject?.html === 'string'
+                    ? textObject.html
+                    : undefined;
+
+                const plainText = htmlToText(html);
+
+                return {
+                  ...(typeof message.sendDateTime === 'string'
+                    ? {
+                        sendDateTime: toCopenhagenIso(
+                          message.sendDateTime,
+                        ),
+                      }
+                    : {}),
+                  ...(typeof senderObject?.fullName === 'string'
+                    ? { sender: senderObject.fullName }
+                    : {}),
+                  ...(plainText ? { text: plainText } : {}),
+                  ...(typeof message.messageType === 'string'
+                    ? { messageType: message.messageType }
+                    : {}),
+                };
+              })
+              .filter(
+                (message) =>
+                  typeof message.text === 'string' &&
+                  message.text.length > 0,
+              );
+
+            return {
+              threadId,
+              subject:
+                typeof threadRecord.subject === 'string'
+                  ? threadRecord.subject
+                  : candidate.subject,
+              messages: compactMessages,
+            };
+          } catch (error) {
+            return {
+              threadId,
+              subject: candidate.subject,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : String(error),
+            };
+          }
+        }),
+      );
+
       // ------------------------------------------------------------
       // Deterministic action candidates
       //
@@ -1883,6 +1979,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           actionCandidates: {
             messages: messageActionCandidates,
           },
+          messageThreads,
           _meta: meta,
         });
       }
