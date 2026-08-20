@@ -1462,8 +1462,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       const calendarInvitations = guardianCalendarEvents
         .filter(
           (event) =>
-            event.responseRequired === true &&
-            event.responseStatus === 'waiting',
+            event.responseRequired === true,
         )
         .map((event) => {
           const belongsToProfiles = Array.isArray(
