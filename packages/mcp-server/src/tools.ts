@@ -1752,7 +1752,36 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           merged.push({ ...candidate });
         }
 
-        calendarActionCandidates[childName] = merged;
+        const todayDate = formatCopenhagenDate(new Date());
+        const tomorrowDate = formatCopenhagenDate(
+          addDays(startOfDayCopenhagen(new Date()), 1),
+        );
+
+        calendarActionCandidates[childName] = merged.map((candidate) => {
+          const start =
+            typeof candidate.start === 'string'
+              ? candidate.start
+              : '';
+
+          const eventDate =
+            start.length > 0
+              ? formatCopenhagenDate(new Date(start))
+              : undefined;
+
+          const dateBucket =
+            eventDate === todayDate
+              ? 'today'
+              : eventDate === tomorrowDate
+                ? 'tomorrow'
+                : 'upcoming';
+
+          return {
+            ...candidate,
+            ...(eventDate ? { eventDate } : {}),
+            dateBucket,
+            appliesToChild: childName,
+          };
+        });
       }
 
       const postActionPattern =
