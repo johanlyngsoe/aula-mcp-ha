@@ -1459,10 +1459,18 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         }
       }
 
+      const rejectedResponseStatuses = new Set([
+        'rejected',
+        'declined',
+      ]);
+
       const calendarInvitations = guardianCalendarEvents
         .filter(
           (event) =>
-            event.responseRequired === true,
+            event.responseRequired === true &&
+            !rejectedResponseStatuses.has(
+              String(event.responseStatus ?? '').toLowerCase(),
+            ),
         )
         .map((event) => {
           const belongsToProfiles = Array.isArray(
