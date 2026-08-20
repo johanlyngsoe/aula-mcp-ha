@@ -207,7 +207,11 @@ export class AulaClient {
   async getMessagesForThread(
     threadId: number,
     opts: { page?: number } = {},
-  ): Promise<{ subject?: string; messages: ThreadMessage[] }> {
+  ): Promise<{
+    subject?: string;
+    messages: ThreadMessage[];
+    _debugTopLevelKeys?: string[];
+  }> {
     const url = this.apiUrl(this.apiVersion, {
       method: 'messaging.getMessagesForThread',
       threadId: String(threadId),
@@ -241,6 +245,7 @@ export class AulaClient {
     return {
       ...(data.subject ? { subject: data.subject } : {}),
       messages: data.messages ?? [],
+      _debugTopLevelKeys: Object.keys(env.data ?? {}),
     };
   }
 
