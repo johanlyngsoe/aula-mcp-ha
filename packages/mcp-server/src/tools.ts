@@ -269,7 +269,17 @@ function resolveRelativePostDate(
   if (requestedDay === undefined) return undefined;
 
   const base = startOfDayCopenhagen(published);
-  const publishedDay = copenhagenDayOfWeek(base);
+
+  // Determine weekday from the Copenhagen calendar date.
+  // Date.UTC avoids the host/container timezone influencing getUTCDay().
+  const copenhagenDate = formatCopenhagenDate(base);
+  const [year, month, day] = copenhagenDate
+    .split('-')
+    .map(Number);
+
+  const publishedDay = new Date(
+    Date.UTC(year, month - 1, day),
+  ).getUTCDay();
 
   let daysAhead = (requestedDay - publishedDay + 7) % 7;
 
