@@ -1658,25 +1658,13 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       const actionSubjectPattern =
         /(fødselsdag|invitation|tilmeld|betaling|betal|svar|deadline|frist|tur|udflugt|møde|forældremøde|lejrskole|skolefest|arrangement)/i;
 
-      const messageCandidateCutoff =
-        Date.now() - 45 * 24 * 60 * 60 * 1000;
-
       const messageActionCandidates = messages.filter((message) => {
         const subject =
           typeof message.subject === 'string'
             ? message.subject
             : '';
 
-        const lastMessageDate =
-          typeof message.lastMessageDate === 'string'
-            ? Date.parse(message.lastMessageDate)
-            : 0;
-
-        return (
-          actionSubjectPattern.test(subject) &&
-          Number.isFinite(lastMessageDate) &&
-          lastMessageDate >= messageCandidateCutoff
-        );
+        return actionSubjectPattern.test(subject);
       });
 
       const messageThreads = await Promise.all(
