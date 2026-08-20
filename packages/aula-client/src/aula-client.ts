@@ -211,6 +211,9 @@ export class AulaClient {
     subject?: string;
     messages: ThreadMessage[];
     _debugTopLevelKeys?: string[];
+    _debugRecipients?: unknown;
+    _debugMailBoxOwner?: unknown;
+    _debugThreadEntityLinkDto?: unknown;
   }> {
     const url = this.apiUrl(this.apiVersion, {
       method: 'messaging.getMessagesForThread',
@@ -242,10 +245,18 @@ export class AulaClient {
       );
     }
     const data: ThreadMessagesData = env.data ?? { messages: [] };
+    const rawData =
+      env.data && typeof env.data === 'object'
+        ? (env.data as unknown as Record<string, unknown>)
+        : {};
+
     return {
       ...(data.subject ? { subject: data.subject } : {}),
       messages: data.messages ?? [],
-      _debugTopLevelKeys: Object.keys(env.data ?? {}),
+      _debugTopLevelKeys: Object.keys(rawData),
+      _debugRecipients: rawData.recipients,
+      _debugMailBoxOwner: rawData.mailBoxOwner,
+      _debugThreadEntityLinkDto: rawData.threadEntityLinkDto,
     };
   }
 
