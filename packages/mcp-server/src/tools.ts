@@ -1309,6 +1309,100 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         }),
       );
 
+      // ------------------------------------------------------------
+      // Guardian calendar invitations requiring a response
+      // ------------------------------------------------------------
+
+      const guardianProfileIds = Array.isArray(discover.institutionProfileIds)
+        ? discover.institutionProfileIds.filter(
+            (id): id is number => typeof id === 'number',
+          )
+        : [];
+
+      const guardianRangeStart = startOfDayCopenhagen(new Date());
+      const guardianRange = {
+        start: aulaTs(guardianRangeStart),
+        end: aulaTs(addDays(guardianRangeStart, 30)),
+      };
+
+      const guardianCalendarEvents =
+        guardianProfileIds.length > 0
+          ? await client.getCalendarEvents({
+              profileIds: guardianProfileIds,
+              start: guardianRange.start,
+              end: guardianRange.end,
+            })
+          : [];
+
+      const childNameByInstitutionProfileId = new Map<number, string>();
+
+      for (const child of children) {
+        const profileId = child.institution?.id;
+
+        if (
+          typeof profileId === 'number' &&
+          typeof child.name === 'string'
+        ) {
+          childNameByInstitutionProfileId.set(
+            profileId,
+            child.name,
+          );
+        }
+      }
+
+      const calendarInvitations = guardianCalendarEvents
+        .filter(
+          (event) =>
+            event.responseRequired === true &&
+            event.responseStatus === 'waiting',
+        )
+        .map((event) => {
+          const belongsToProfiles = Array.isArray(
+            event.belongsToProfiles,
+          )
+            ? event.belongsToProfiles.filter(
+                (id): id is number => typeof id === 'number',
+              )
+            : [];
+
+          const appliesToChildren = belongsToProfiles
+            .map((id) =>
+              childNameByInstitutionProfileId.get(id),
+            )
+            .filter(
+              (name): name is string =>
+                typeof name === 'string',
+            );
+
+          return {
+            eventId: event.id,
+            title: event.title,
+            start: toCopenhagenIso(event.startDateTime),
+            end: toCopenhagenIso(event.endDateTime),
+            responseStatus: event.responseStatus,
+            ...(typeof event.responseDeadline === 'string'
+              ? {
+                  responseDeadline: toCopenhagenIso(
+                    event.responseDeadline,
+                  ),
+                }
+              : {}),
+            ...(typeof event.additionalResourceText === 'string' &&
+            event.additionalResourceText.length > 0
+              ? {
+                  details: event.additionalResourceText,
+                }
+              : {}),
+            ...(appliesToChildren.length > 0
+              ? { appliesToChildren }
+              : {}),
+          };
+        })
+        .sort(
+          (a, b) =>
+            Date.parse(a.start) - Date.parse(b.start),
+        );
+
       const postLimit = args.postLimit ?? 30;
 
       const [groupIds, groupMeta] = await Promise.all([
@@ -1597,6 +1691,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         },
         actionCandidates: {
           calendar: calendarActionCandidates,
+          calendarInvitations,
           posts: {
             byChild: postActionCandidatesByChild,
             shared: sharedPostActionCandidates,
