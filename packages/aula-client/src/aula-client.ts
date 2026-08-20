@@ -210,10 +210,7 @@ export class AulaClient {
   ): Promise<{
     subject?: string;
     messages: ThreadMessage[];
-    _debugTopLevelKeys?: string[];
-    _debugRecipients?: unknown;
-    _debugMailBoxOwner?: unknown;
-    _debugThreadEntityLinkDto?: unknown;
+    recipients?: unknown[];
   }> {
     const url = this.apiUrl(this.apiVersion, {
       method: 'messaging.getMessagesForThread',
@@ -253,10 +250,9 @@ export class AulaClient {
     return {
       ...(data.subject ? { subject: data.subject } : {}),
       messages: data.messages ?? [],
-      _debugTopLevelKeys: Object.keys(rawData),
-      _debugRecipients: rawData.recipients,
-      _debugMailBoxOwner: rawData.mailBoxOwner,
-      _debugThreadEntityLinkDto: rawData.threadEntityLinkDto,
+      ...(Array.isArray(rawData.recipients)
+        ? { recipients: rawData.recipients }
+        : {}),
     };
   }
 

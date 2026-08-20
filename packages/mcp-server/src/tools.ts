@@ -1667,6 +1667,143 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return actionSubjectPattern.test(subject);
       });
 
+      const guardianProfileIdsForMessages = new Set<number>(
+        Array.isArray(discover.institutionProfileIds)
+          ? discover.institutionProfileIds.filter(
+              (id): id is number => typeof id === 'number',
+            )
+          : [],
+      );
+
+      const childFirstNames = children
+        .map((child) => ({
+          fullName:
+            typeof child.name === 'string'
+              ? child.name
+              : '',
+          firstName:
+            typeof child.name === 'string'
+              ? child.name.split(' ')[0]
+              : '',
+        }))
+        .filter(
+          (child) =>
+            child.fullName.length > 0 &&
+            child.firstName.length > 0,
+        );
+
+      const inferChildrenFromRecipients = (
+        recipients: unknown[],
+      ): string[] => {
+        const recipientRecords = recipients.filter(
+          (recipient): recipient is Record<string, unknown> =>
+            Boolean(recipient) && typeof recipient === 'object',
+        );
+
+        const metadataValues = recipientRecords
+          .map((recipient) =>
+            typeof recipient.metadata === 'string'
+              ? recipient.metadata
+              : '',
+          )
+          .filter((metadata) => metadata.length > 0);
+
+        if (metadataValues.length < 3) {
+          return [];
+        }
+
+        // Count each grade at most once per recipient.
+        const gradeCounts = new Map<number, number>();
+
+        for (const metadata of metadataValues) {
+          const gradesForRecipient = new Set<number>();
+
+          for (const match of metadata.matchAll(/\b(\d{1,2})[A-Za-zÆØÅæøå]\b/g)) {
+            const grade = Number(match[1]);
+
+            if (Number.isFinite(grade)) {
+              gradesForRecipient.add(grade);
+            }
+          }
+
+          for (const grade of gradesForRecipient) {
+            gradeCounts.set(
+              grade,
+              (gradeCounts.get(grade) ?? 0) + 1,
+            );
+          }
+        }
+
+        const rankedGrades = [...gradeCounts.entries()]
+          .sort((a, b) => b[1] - a[1]);
+
+        const dominant = rankedGrades[0];
+
+        if (!dominant) {
+          return [];
+        }
+
+        const [dominantGrade, dominantCount] = dominant;
+
+        // Require a clear signal: at least 3 recipients and >=60%.
+        if (
+          dominantCount < 3 ||
+          dominantCount / metadataValues.length < 0.6
+        ) {
+          return [];
+        }
+
+        // Find the current guardian's recipient record.
+        const ownRecipient = recipientRecords.find((recipient) => {
+          const owner =
+            recipient.mailBoxOwner &&
+            typeof recipient.mailBoxOwner === 'object'
+              ? (recipient.mailBoxOwner as Record<string, unknown>)
+              : undefined;
+
+          const ownerId =
+            typeof owner?.id === 'number'
+              ? owner.id
+              : Number(owner?.id);
+
+          return (
+            Number.isFinite(ownerId) &&
+            guardianProfileIdsForMessages.has(ownerId)
+          );
+        });
+
+        const ownMetadata =
+          ownRecipient &&
+          typeof ownRecipient.metadata === 'string'
+            ? ownRecipient.metadata
+            : '';
+
+        if (!ownMetadata) {
+          return [];
+        }
+
+        return childFirstNames
+          .filter((child) => {
+            const escapedName = child.firstName.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              '\\$&',
+            );
+
+            const pattern = new RegExp(
+              `(?:^|,\\s*)${escapedName}\\s+(\\d{1,2})[A-Za-zÆØÅæøå]\\b`,
+              'i',
+            );
+
+            const match = ownMetadata.match(pattern);
+
+            return (
+              match !== null &&
+              Number(match[1]) === dominantGrade
+            );
+          })
+          .map((child) => child.fullName);
+      };
+
       const rawMessageThreads = await Promise.all(
         messageActionCandidates.map(async (candidate) => {
           const threadId =
@@ -1742,12 +1879,22 @@ export function registerTools(server: McpServer, context: AulaContext): void {
                   message.text.length > 0,
               );
 
+            const recipients = Array.isArray(thread.recipients)
+              ? thread.recipients
+              : [];
+
+            const appliesToChildren =
+              inferChildrenFromRecipients(recipients);
+
             return {
               threadId,
               subject:
                 typeof threadRecord.subject === 'string'
                   ? threadRecord.subject
                   : candidate.subject,
+              ...(appliesToChildren.length > 0
+                ? { appliesToChildren }
+                : {}),
               messages: compactMessages,
             };
           } catch (error) {
