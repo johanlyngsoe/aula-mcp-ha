@@ -187,6 +187,105 @@ function htmlToText(value: unknown): string | undefined {
     .trim();
 }
 
+type ResolvedRelativeDate = {
+  resolvedDate: string;
+  resolvedFrom: string;
+};
+
+function formatCopenhagenDate(d: Date): string {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Copenhagen',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  const parts = fmt.formatToParts(d);
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+function resolveRelativePostDate(
+  post: Record<string, unknown>,
+): ResolvedRelativeDate | undefined {
+  const publishedAt =
+    typeof post.publishedAt === 'string'
+      ? post.publishedAt
+      : undefined;
+
+  if (!publishedAt) return undefined;
+
+  const published = new Date(publishedAt);
+  if (Number.isNaN(published.getTime())) return undefined;
+
+  const title =
+    typeof post.title === 'string'
+      ? post.title
+      : '';
+
+  const body =
+    typeof post.text === 'string'
+      ? post.text
+      : '';
+
+  const source = `${title}\n${body}`;
+
+  // "i morgen" = exactly one calendar day after publication.
+  const tomorrowMatch = source.match(/\bi morgen\b/i);
+
+  if (tomorrowMatch) {
+    const base = startOfDayCopenhagen(published);
+    const resolved = addDays(base, 1);
+
+    return {
+      resolvedDate: formatCopenhagenDate(resolved),
+      resolvedFrom: tomorrowMatch[0],
+    };
+  }
+
+  // "på mandag", "på tirsdag", etc. means the first matching
+  // weekday strictly AFTER the publication date.
+  const weekdayMatch = source.match(
+    /\bpå\s+(mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag)\b/i,
+  );
+
+  if (!weekdayMatch) return undefined;
+
+  const weekdayMap: Record<string, number> = {
+    søndag: 0,
+    mandag: 1,
+    tirsdag: 2,
+    onsdag: 3,
+    torsdag: 4,
+    fredag: 5,
+    lørdag: 6,
+  };
+
+  const requestedDay =
+    weekdayMap[weekdayMatch[1].toLowerCase()];
+
+  if (requestedDay === undefined) return undefined;
+
+  const base = startOfDayCopenhagen(published);
+  const publishedDay = copenhagenDayOfWeek(base);
+
+  let daysAhead = (requestedDay - publishedDay + 7) % 7;
+
+  // "på tirsdag" on a Tuesday means next Tuesday, not today.
+  if (daysAhead === 0) {
+    daysAhead = 7;
+  }
+
+  const resolved = addDays(base, daysAhead);
+
+  return {
+    resolvedDate: formatCopenhagenDate(resolved),
+    resolvedFrom: weekdayMatch[0],
+  };
+}
+
 function compactPost(post: Record<string, unknown>): Record<string, unknown> {
   const content = post.content as { html?: unknown } | undefined;
 
@@ -1665,6 +1764,17 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return postActionPattern.test(`${title}\n${body}`);
       };
 
+      const withResolvedRelativeDate = (
+        post: Record<string, unknown>,
+      ): Record<string, unknown> => {
+        const resolved = resolveRelativePostDate(post);
+
+        return {
+          ...post,
+          ...(resolved ?? {}),
+        };
+      };
+
       const postActionCandidatesByChild: Record<
         string,
         Array<Record<string, unknown>>
@@ -1673,6 +1783,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           name,
           posts
             .filter(isActionPost)
+            .map(withResolvedRelativeDate)
             .map((post) => ({
               ...post,
               appliesToChild: name,
@@ -1681,7 +1792,9 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       );
 
       const sharedPostActionCandidates =
-        sharedPosts.filter(isActionPost);
+        sharedPosts
+          .filter(isActionPost)
+          .map(withResolvedRelativeDate);
 
       const schoolPayload = {
         children: schedule,
