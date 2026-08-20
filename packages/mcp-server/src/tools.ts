@@ -1667,7 +1667,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return actionSubjectPattern.test(subject);
       });
 
-      const messageThreads = await Promise.all(
+      const rawMessageThreads = await Promise.all(
         messageActionCandidates.map(async (candidate) => {
           const threadId =
             typeof candidate.id === 'number'
@@ -1762,6 +1762,34 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           }
         }),
       );
+
+      const messageThreadCutoff =
+        Date.now() - 45 * 24 * 60 * 60 * 1000;
+
+      const messageThreads = rawMessageThreads.filter((thread) => {
+        if (!('messages' in thread) || !Array.isArray(thread.messages)) {
+          return true;
+        }
+
+        const newestMessageTime = thread.messages.reduce(
+          (latest, message) => {
+            const raw =
+              typeof message.sendDateTime === 'string'
+                ? Date.parse(message.sendDateTime)
+                : 0;
+
+            return Number.isFinite(raw) && raw > latest
+              ? raw
+              : latest;
+          },
+          0,
+        );
+
+        return (
+          newestMessageTime === 0 ||
+          newestMessageTime >= messageThreadCutoff
+        );
+      });
 
       // ------------------------------------------------------------
       // Deterministic action candidates
