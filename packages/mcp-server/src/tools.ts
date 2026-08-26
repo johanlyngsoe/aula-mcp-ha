@@ -2286,6 +2286,9 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             byChild: postActionCandidatesByChild,
             shared: sharedPostActionCandidates,
           },
+          weekPlan: {
+            byChild: weekPlanActionCandidatesByChild,
+          },
         },
       };
 
