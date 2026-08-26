@@ -1324,6 +1324,166 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         ? discover.children
         : [];
 
+      // ------------------------------------------------------------
+      // Meebook week-plan attention data
+      //
+      // Week plans contain child-specific practical information that
+      // may not exist in Aula calendar/posts, e.g. trips, things to
+      // bring, changed PE instructions, etc.
+      //
+      // Fetch current + next ISO week and expose only potentially
+      // actionable entries. The full content is retained so the
+      // downstream model can interpret positive and negative
+      // instructions ("medbring ..." / "behøver ikke ...").
+      // ------------------------------------------------------------
+
+      const weekPlanActionPattern =
+        /(husk|medbring|skal have|skal på|tur|udflugt|idræt|svøm|svømning|madpakke|drikkedunk|tur\s*taske|turtaske|praktisk tøj|biblioteksbøger|mød.*omklædt|omklædt|behøver ikke|skal ikke|ingen|aflyst|aflysning|ændret|ændring)/i;
+
+      const weekPlanActionCandidatesByChild: Record<
+        string,
+        Array<Record<string, unknown>>
+      > = {};
+
+      for (const child of children) {
+        if (typeof child.name === 'string') {
+          weekPlanActionCandidatesByChild[child.name] = [];
+        }
+      }
+
+      const weekPlanWarnings: string[] = [];
+
+      if (mode !== 'messages' && children.length > 0) {
+        try {
+          const record = context.record;
+
+          if (!record) {
+            throw new Error('AulaContext: no token record loaded');
+          }
+
+          const guardianUserId = await context.getGuardianUserId();
+          const profilesData = await client.getProfilesByLogin();
+
+          const userIdByChildId = new Map<number, string>();
+
+          for (const profile of profilesData.profiles ?? []) {
+            for (const profileChild of profile.children ?? []) {
+              if (profileChild.userId != null) {
+                userIdByChildId.set(
+                  profileChild.id,
+                  String(profileChild.userId),
+                );
+              }
+            }
+          }
+
+          const weekPlanChildren = children.filter(
+            (child) =>
+              typeof child.id === 'number' &&
+              typeof child.name === 'string' &&
+              typeof child.institution?.code === 'string',
+          );
+
+          const childIds = weekPlanChildren.map(
+            (child) => child.id as number,
+          );
+
+          const childUserIds = childIds.map(
+            (id) => userIdByChildId.get(id) ?? '',
+          );
+
+          const institutionCodes = Array.from(
+            new Set(
+              weekPlanChildren.map(
+                (child) => child.institution!.code as string,
+              ),
+            ),
+          );
+
+          const currentWeek = isoWeekString();
+          const nextWeekDate = addDays(new Date(), 7);
+          const nextWeek = isoWeekString(nextWeekDate);
+
+          const meebook = await context.getMeebook();
+
+          const weekResults = await Promise.all(
+            [currentWeek, nextWeek].map(async (isoWeek) => {
+              return meebook.getWeekPlan({
+                isoWeek,
+                sessionId: record.username,
+                guardianId: guardianUserId,
+                childIds,
+                childUserIds,
+                institutionCodes,
+              });
+            }),
+          );
+
+          for (const result of weekResults) {
+            for (const warning of result.warnings ?? []) {
+              weekPlanWarnings.push(warning);
+            }
+
+            for (const item of result.items ?? []) {
+              const childName =
+                typeof item.childName === 'string'
+                  ? item.childName
+                  : undefined;
+
+              if (
+                !childName ||
+                !(childName in weekPlanActionCandidatesByChild)
+              ) {
+                continue;
+              }
+
+              const searchable = [
+                item.subject,
+                item.title,
+                item.content,
+              ]
+                .filter(
+                  (value): value is string =>
+                    typeof value === 'string',
+                )
+                .join('\n');
+
+              if (!weekPlanActionPattern.test(searchable)) {
+                continue;
+              }
+
+              weekPlanActionCandidatesByChild[childName].push({
+                ...(typeof item.date === 'string'
+                  ? { date: item.date }
+                  : {}),
+                ...(typeof item.subject === 'string'
+                  ? { subject: item.subject }
+                  : {}),
+                ...(typeof item.title === 'string'
+                  ? { title: item.title }
+                  : {}),
+                ...(typeof item.content === 'string'
+                  ? { content: item.content }
+                  : {}),
+                ...(typeof item.kind === 'string'
+                  ? { kind: item.kind }
+                  : {}),
+                ...(typeof item.url === 'string'
+                  ? { url: item.url }
+                  : {}),
+                appliesToChild: childName,
+              });
+            }
+          }
+        } catch (error) {
+          weekPlanWarnings.push(
+            error instanceof Error
+              ? error.message
+              : String(error),
+          );
+        }
+      }
+
       const schedule = await Promise.all(
         children.map(async (child) => {
           const profileId = child.institution?.id;
