@@ -165,7 +165,15 @@ function parseClockPair(line: string): { start: string; end: string } | undefine
 }
 
 function isoOnDate(date: string, clock: string): string {
-  return `${date}T${clock}+02:00`;
+  const offsetName = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Copenhagen',
+    timeZoneName: 'longOffset',
+  })
+    .formatToParts(new Date(`${date}T12:00:00Z`))
+    .find((part) => part.type === 'timeZoneName')?.value;
+  const offset = offsetName?.replace('GMT', '') || '+01:00';
+
+  return `${date}T${clock}${offset}`;
 }
 
 function attachmentTexts(post: Record<string, unknown>): string[] {
