@@ -1548,9 +1548,28 @@ export function registerTools(server: McpServer, context: AulaContext): void {
                 continue;
               }
 
+              const itemDate =
+                typeof item.date === 'string'
+                  ? item.date
+                  : undefined;
+              const todayDate = formatCopenhagenDate(new Date());
+              const tomorrowDate = formatCopenhagenDate(
+                addDays(startOfDayCopenhagen(new Date()), 1),
+              );
+              const dateBucket =
+                itemDate === todayDate
+                  ? 'today'
+                  : itemDate === tomorrowDate
+                    ? 'tomorrow'
+                    : 'upcoming';
+
               weekPlanActionCandidatesByChild[childName].push({
-                ...(typeof item.date === 'string'
-                  ? { date: item.date }
+                ...(itemDate
+                  ? {
+                      date: itemDate,
+                      resolvedDate: itemDate,
+                      dateBucket,
+                    }
                   : {}),
                 ...(typeof item.subject === 'string'
                   ? { subject: item.subject }
@@ -2268,6 +2287,15 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         Date.now() - 45 * 24 * 60 * 60 * 1000;
 
       const messageThreads = rawMessageThreads.filter((thread) => {
+        const subject =
+          'subject' in thread && typeof thread.subject === 'string'
+            ? thread.subject
+            : '';
+
+        if (subject && hasExpiredExplicitDanishEventDate(subject)) {
+          return false;
+        }
+
         if (!('messages' in thread) || !Array.isArray(thread.messages)) {
           return true;
         }
