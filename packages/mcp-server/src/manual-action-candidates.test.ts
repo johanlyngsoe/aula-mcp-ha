@@ -5,7 +5,7 @@ describe('buildManualActionCandidates', () => {
   test('adds stable source identity without interpreting message semantics', () => {
     const thread = {
       threadId: 1234,
-      subject: 'Invitation',
+      subject: 'Betaling til lejrskole',
       appliesToChildren: ['Barn A'],
       messages: [{ sendDateTime: '2026-09-11T12:00:00+02:00', text: 'Test' }],
     };
@@ -30,12 +30,22 @@ describe('buildManualActionCandidates', () => {
       sourceId: 'message-thread:1234',
       source: 'aula-message-thread',
       threadId: 1234,
+      title: 'Betaling til lejrskole',
+      detail: 'Test',
+      actionType: 'payment',
+      suggestedEvent: {
+        title: 'Betaling til lejrskole',
+        start: null,
+        end: null,
+        location: null,
+      },
       appliesToChildren: ['Barn A'],
       confidence: 'source_identity',
       validation: { state: 'valid', reasons: [] },
     });
     expect(firstCandidate.fingerprint).toHaveLength(24);
     expect(secondCandidate.fingerprint).toBe(firstCandidate.fingerprint);
+    expect(secondCandidate.detail).toBe('Test\n\nReminder');
   });
 
   test('keeps ambiguous child binding visible for explicit user choice', () => {

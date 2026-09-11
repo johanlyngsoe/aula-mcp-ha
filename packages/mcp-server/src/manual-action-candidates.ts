@@ -6,6 +6,15 @@ export interface ManualActionCandidate {
   source: 'aula-message-thread';
   threadId: number;
   subject: string | null;
+  title: string;
+  detail: string;
+  actionType: 'response' | 'payment' | 'other';
+  suggestedEvent: {
+    title: string;
+    start: null;
+    end: null;
+    location: null;
+  };
   appliesToChildren: string[];
   confidence: 'source_identity';
   validation: {
@@ -28,6 +37,28 @@ function strings(value: unknown): string[] {
   ].sort((a, b) => a.localeCompare(b, 'da-DK'));
 }
 
+function messageDetail(value: unknown): string {
+  if (!Array.isArray(value)) return '';
+
+  return value
+    .flatMap((message) => {
+      if (!message || typeof message !== 'object') return [];
+      const text = (message as Record<string, unknown>).text;
+      return typeof text === 'string' && text.trim() ? [text.trim()] : [];
+    })
+    .slice(-3)
+    .join('\n\n')
+    .slice(0, 4000);
+}
+
+function actionType(value: string): ManualActionCandidate['actionType'] {
+  if (/\b(betal|betaling|overfør|mobilepay|kr\.?\b)/i.test(value)) return 'payment';
+  if (/\b(svar|tilmeld|bekræft|godkend|return[eé]r|underskriv|udfyld)/i.test(value)) {
+    return 'response';
+  }
+  return 'other';
+}
+
 export function buildManualActionCandidates(
   threads: Array<Record<string, unknown>>,
 ): ManualActionCandidate[] {
@@ -42,6 +73,12 @@ export function buildManualActionCandidates(
     const sourceId = `message-thread:${threadId}`;
     const appliesToChildren = strings(thread.appliesToChildren);
     const reasons = appliesToChildren.length > 0 ? [] : ['missing_child_binding'];
+    const subject =
+      typeof thread.subject === 'string' && thread.subject.trim().length > 0
+        ? thread.subject.trim()
+        : null;
+    const title = subject || 'Aula-besked';
+    const detail = messageDetail(thread.messages) || title;
 
     return [
       {
@@ -49,10 +86,16 @@ export function buildManualActionCandidates(
         fingerprint: hash([sourceId]),
         source: 'aula-message-thread' as const,
         threadId,
-        subject:
-          typeof thread.subject === 'string' && thread.subject.trim().length > 0
-            ? thread.subject.trim()
-            : null,
+        subject,
+        title,
+        detail,
+        actionType: actionType(`${title}\n${detail}`),
+        suggestedEvent: {
+          title,
+          start: null,
+          end: null,
+          location: null,
+        },
         appliesToChildren,
         confidence: 'source_identity' as const,
         validation: {
