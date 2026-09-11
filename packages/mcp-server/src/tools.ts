@@ -31,6 +31,20 @@ const execFileAsync = promisify(execFile);
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_ATTACHMENT_TEXT_CHARS = 30_000;
 
+const WEEK_PLAN_ACTION_PATTERN =
+  /(husk|medbring|skal have|skal på|tur|udflugt|idræt|svøm|svømning|madpakke|drikkedunk|tur\s*taske|turtaske|praktisk tøj|biblioteksbøger|mød.*omklædt|omklædt|behøver ikke|skal ikke|ingen|aflyst|aflysning|ændret|ændring|foto|fotograf|fotografering|skoleportræt|portræt)/i;
+
+const POST_ACTION_PATTERN =
+  /(medbring|husk|husk at|reminder|hjælp søges|skal have med|send|sende|tilmeld|tilmelding|betaling|betal|deadline|frist|svar|fødselsdag|invitation|tur|udflugt|museum|blicher|lejrskole|idræt|svøm|projekt|kæphest|materiale|mødetid|afgang|ændring|aflyst|aflysning|foto|fotograf|fotografering|skoleportræt|portræt)/i;
+
+export function isWeekPlanActionText(value: string): boolean {
+  return WEEK_PLAN_ACTION_PATTERN.test(value);
+}
+
+export function isPostActionText(value: string): boolean {
+  return POST_ACTION_PATTERN.test(value);
+}
+
 function normalizeAttachmentText(value: string): string {
   return value
     .replace(/\r\n/g, '\n')
@@ -1337,9 +1351,6 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       // instructions ("medbring ..." / "behøver ikke ...").
       // ------------------------------------------------------------
 
-      const weekPlanActionPattern =
-        /(husk|medbring|skal have|skal på|tur|udflugt|idræt|svøm|svømning|madpakke|drikkedunk|tur\s*taske|turtaske|praktisk tøj|biblioteksbøger|mød.*omklædt|omklædt|behøver ikke|skal ikke|ingen|aflyst|aflysning|ændret|ændring)/i;
-
       const weekPlanActionCandidatesByChild: Record<
         string,
         Array<Record<string, unknown>>
@@ -1448,7 +1459,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
                 )
                 .join('\n');
 
-              if (!weekPlanActionPattern.test(searchable)) {
+              if (!isWeekPlanActionText(searchable)) {
                 continue;
               }
 
@@ -1751,9 +1762,97 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       mergedPosts.sort((a, b) => dateOf(b) - dateOf(a));
 
-      const compactedPosts = mergedPosts
-        .slice(0, postLimit)
-        .map(compactPost);
+      const selectedPosts = mergedPosts.slice(0, postLimit);
+      const compactedPosts = selectedPosts.map(compactPost);
+
+      // Attention summaries normally use compact post metadata only. For
+      // actionable posts, also extract readable attachment text so details
+      // such as class-specific photography times are not lost in a PDF.
+      await Promise.all(
+        selectedPosts.map(async (rawPost, postIndex) => {
+          const compactedPost = compactedPosts[postIndex];
+          if (!compactedPost) return;
+
+          const title =
+            typeof compactedPost.title === 'string'
+              ? compactedPost.title
+              : '';
+          const body =
+            typeof compactedPost.text === 'string'
+              ? compactedPost.text
+              : '';
+
+          if (!isPostActionText(`${title}\n${body}`)) return;
+
+          const rawAttachments = Array.isArray(rawPost.attachments)
+            ? rawPost.attachments
+            : [];
+          const compactAttachments = Array.isArray(
+            compactedPost.attachments,
+          )
+            ? (compactedPost.attachments as Array<
+                Record<string, unknown>
+              >)
+            : [];
+
+          await Promise.all(
+            rawAttachments.map(async (rawAttachment) => {
+              if (
+                !rawAttachment ||
+                typeof rawAttachment !== 'object'
+              ) {
+                return;
+              }
+
+              const attachment = rawAttachment as Record<
+                string,
+                unknown
+              >;
+              const fileObject =
+                attachment.file &&
+                typeof attachment.file === 'object'
+                  ? (attachment.file as Record<string, unknown>)
+                  : undefined;
+              const attachmentIdRaw =
+                attachment.id ?? fileObject?.id;
+              const attachmentId =
+                typeof attachmentIdRaw === 'number'
+                  ? attachmentIdRaw
+                  : Number(attachmentIdRaw);
+
+              if (!Number.isFinite(attachmentId)) return;
+
+              const compactAttachment = compactAttachments.find(
+                (candidate) =>
+                  Number(candidate.id) === attachmentId,
+              );
+              if (!compactAttachment?.readable) return;
+
+              const name =
+                typeof compactAttachment.name === 'string'
+                  ? compactAttachment.name
+                  : '';
+              const url =
+                typeof attachment.url === 'string'
+                  ? attachment.url
+                  : typeof fileObject?.url === 'string'
+                    ? fileObject.url
+                    : undefined;
+
+              if (!url) {
+                compactAttachment.readError =
+                  'Attachment has no downloadable file URL';
+                return;
+              }
+
+              Object.assign(
+                compactAttachment,
+                await parseAttachmentFile(name, url),
+              );
+            }),
+          );
+        }),
+      );
 
       const childNames = children
         .map((child) => child.name)
@@ -2222,9 +2321,6 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         });
       }
 
-      const postActionPattern =
-        /(medbring|husk|husk at|reminder|hjælp søges|skal have med|send|sende|tilmeld|tilmelding|betaling|betal|deadline|frist|svar|fødselsdag|invitation|tur|udflugt|museum|blicher|lejrskole|idræt|svøm|projekt|kæphest|materiale|mødetid|afgang|ændring|aflyst|aflysning)/i;
-
       const isActionPost = (
         post: Record<string, unknown>,
       ): boolean => {
@@ -2238,7 +2334,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             ? post.text
             : '';
 
-        return postActionPattern.test(`${title}\n${body}`);
+        return isPostActionText(`${title}\n${body}`);
       };
 
       const withResolvedRelativeDate = (
