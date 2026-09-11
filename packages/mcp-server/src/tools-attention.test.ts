@@ -30,6 +30,17 @@ describe('Aula attention filters', () => {
     ).toBe(true);
   });
 
+  test('expires a passed Danish date range', () => {
+    const now = new Date('2026-09-11T10:00:00+02:00');
+
+    expect(
+      hasExpiredExplicitDanishEventDate(
+        'Lejrskole d. 9.-10. september',
+        now,
+      ),
+    ).toBe(true);
+  });
+
   test('keeps future and same-day event dates', () => {
     const now = new Date('2026-09-11T10:00:00+02:00');
 
