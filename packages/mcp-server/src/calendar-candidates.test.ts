@@ -72,9 +72,7 @@ describe('buildCalendarCandidates', () => {
     });
   });
 
-  test(
-    'derives photography time from a dynamic class match and authoritative week-plan date',
-    () => {
+  test('derives photography time from dynamic class and week-plan date', () => {
     const candidates = buildCalendarCandidates({
       children: [
         { name: 'Barn A', className: '3.a' },
@@ -137,8 +135,7 @@ describe('buildCalendarCandidates', () => {
         validation: { state: 'valid', reasons: [] },
       },
     ]);
-    },
-  );
+  });
 
   test('does not create photography when the dynamic class row is ambiguous', () => {
     const candidates = buildCalendarCandidates({
