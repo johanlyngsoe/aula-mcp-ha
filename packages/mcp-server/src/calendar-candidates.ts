@@ -41,6 +41,7 @@ export interface CalendarCandidateInput {
   weekPlanByChild: RecordListByChild;
   postsByChild: RecordListByChild;
   sharedPosts: Array<Record<string, unknown>>;
+  now?: Date;
 }
 
 const SPECIAL_ACTIVITY_PATTERNS: Array<[
@@ -172,27 +173,141 @@ function normalizeClassName(value: string): string {
   return value.toLocaleLowerCase('da-DK').replace(/[^0-9a-zæøå]/g, '');
 }
 
-function linesWithClass(attachmentText: string, className: string): string[] {
-  const wanted = normalizeClassName(className);
-  if (!wanted) return [];
+const DANISH_MONTHS: Record<string, number> = {
+  jan: 1,
+  januar: 1,
+  feb: 2,
+  februar: 2,
+  mar: 3,
+  marts: 3,
+  apr: 4,
+  april: 4,
+  maj: 5,
+  jun: 6,
+  juni: 6,
+  jul: 7,
+  juli: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  okt: 10,
+  oktober: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
 
-  return attachmentText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => normalizeClassName(line).includes(wanted));
+function copenhagenDateParts(value: Date): {
+  year: number;
+  month: number;
+  day: number;
+} {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Copenhagen',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((candidate) => candidate.type === type)?.value);
+
+  return { year: part('year'), month: part('month'), day: part('day') };
 }
 
-function parseClockPair(line: string): { start: string; end: string } | undefined {
-  const matches = [
-    ...line.matchAll(/(?:kl\.?\s*)?(\d{1,2})[.:](\d{2})/gi),
-  ];
+function resolveDanishDate(value: string, now: Date): string | undefined {
+  const iso = value.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  if (matches.length < 2) return undefined;
+  const numeric = value.match(/\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{4}))?\b/);
+  const named = value
+    .toLocaleLowerCase('da-DK')
+    .match(
+      /\b(\d{1,2})[.]?\s*(jan(?:uar)?|feb(?:ruar)?|mar(?:ts)?|apr(?:il)?|maj|jun(?:i)?|jul(?:i)?|aug(?:ust)?|sept?(?:ember)?|okt(?:ober)?|nov(?:ember)?|dec(?:ember)?)[.]?/i,
+    );
 
-  const toClock = (match: RegExpMatchArray): string =>
-    `${match[1].padStart(2, '0')}:${match[2]}:00`;
+  const reference = copenhagenDateParts(now);
+  const day = numeric ? Number(numeric[1]) : named ? Number(named[1]) : Number.NaN;
+  const month = numeric
+    ? Number(numeric[2])
+    : named
+      ? DANISH_MONTHS[named[2].toLocaleLowerCase('da-DK')]
+      : Number.NaN;
+  let year = numeric?.[3] ? Number(numeric[3]) : reference.year;
 
-  return { start: toClock(matches[0]), end: toClock(matches[1]) };
+  if (!Number.isInteger(day) || !Number.isInteger(month)) return undefined;
+
+  const referenceDay = Date.UTC(reference.year, reference.month - 1, reference.day);
+  let candidateDay = Date.UTC(year, month - 1, day);
+
+  if (!numeric?.[3] && candidateDay < referenceDay - 180 * 24 * 60 * 60 * 1000) {
+    year += 1;
+    candidateDay = Date.UTC(year, month - 1, day);
+  }
+
+  const date = new Date(candidateDay);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return `${year.toString().padStart(4, '0')}-${month
+    .toString()
+    .padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
+function classPattern(className: string): string | undefined {
+  const normalized = normalizeClassName(className);
+  const match = normalized.match(/^(\d{1,2})([a-zæøå])$/i);
+  if (!match) return undefined;
+
+  return `${match[1]}\\s*\\.?\\s*${match[2]}`;
+}
+
+function clock(hour: string, minute: string): string {
+  return `${hour.padStart(2, '0')}:${minute}:00`;
+}
+
+function clockPairsForClass(
+  value: string,
+  className: string,
+): Array<{ start: string; end: string; evidence: string }> {
+  const klass = classPattern(className);
+  if (!klass) return [];
+
+  const time = '(\\d{1,2})[.:](\\d{2})';
+  const afterClass = new RegExp(
+    `${klass}\\s*:?\\s*(?:kl\\.?\\s*)?${time}\\s*[-–]\\s*${time}`,
+    'gi',
+  );
+  const beforeClass = new RegExp(
+    `${time}\\s*[-–]\\s*${time}\\s+${klass}(?![0-9A-Za-zÆØÅæøå])`,
+    'gi',
+  );
+  const result: Array<{ start: string; end: string; evidence: string }> = [];
+
+  for (const match of value.matchAll(afterClass)) {
+    result.push({
+      start: clock(match[1], match[2]),
+      end: clock(match[3], match[4]),
+      evidence: match[0],
+    });
+  }
+
+  for (const match of value.matchAll(beforeClass)) {
+    result.push({
+      start: clock(match[1], match[2]),
+      end: clock(match[3], match[4]),
+      evidence: match[0],
+    });
+  }
+
+  return result;
 }
 
 function isoOnDate(date: string, clock: string): string {
@@ -335,39 +450,37 @@ export function buildCalendarCandidates(
         continue;
       }
 
-      const date = text(item.resolvedDate) ?? text(item.date);
-      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const rawDate = text(item.resolvedDate) ?? text(item.date);
+      const date = rawDate ? resolveDanishDate(rawDate, input.now ?? new Date()) : undefined;
+      if (!date) continue;
 
       const matches: Array<{
-        post: Record<string, unknown>;
-        line: string;
-        clocks: { start: string; end: string };
-      }> = [];
+        post?: Record<string, unknown>;
+        start: string;
+        end: string;
+        evidence: string;
+      }> = clockPairsForClass(searchable, className);
 
       for (const post of posts) {
         for (const attachmentText of attachmentTexts(post)) {
-          for (const line of linesWithClass(attachmentText, className)) {
-            const clocks = parseClockPair(line);
-            if (clocks) matches.push({ post, line, clocks });
+          for (const match of clockPairsForClass(attachmentText, className)) {
+            matches.push({ post, ...match });
           }
         }
       }
 
       const uniqueTimes = new Map(
-        matches.map((match) => [
-          `${match.clocks.start}|${match.clocks.end}`,
-          match,
-        ]),
+        matches.map((match) => [`${match.start}|${match.end}`, match]),
       );
 
       if (uniqueTimes.size !== 1) continue;
 
       const match = [...uniqueTimes.values()][0];
-      const start = isoOnDate(date, match.clocks.start);
-      const end = isoOnDate(date, match.clocks.end);
-      const sourceId = `week-plan-photo:${postId(match.post)}:${date}:${normalizeClassName(
-        className,
-      )}`;
+      const start = isoOnDate(date, match.start);
+      const end = isoOnDate(date, match.end);
+      const sourceId = `week-plan-photo:${
+        match.post ? postId(match.post) : canonicalHash([child, searchable])
+      }:${date}:${normalizeClassName(className)}`;
 
       candidates.push(
         makeCandidate({
@@ -379,7 +492,7 @@ export function buildCalendarCandidates(
           start,
           end,
           description: searchable,
-          details: match.line,
+          details: match.evidence,
         }),
       );
     }
