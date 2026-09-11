@@ -271,7 +271,7 @@ function classPattern(className: string): string | undefined {
   const match = normalized.match(/^(\d{1,2})([a-zæøå])$/i);
   if (!match) return undefined;
 
-  return `${match[1]}\\s*\\.?\\s*${match[2]}`;
+  return `${match[1]}[ \\t]*\\.?[ \\t]*${match[2]}`;
 }
 
 function clock(hour: string, minute: string): string {
@@ -287,11 +287,11 @@ function clockPairsForClass(
 
   const time = '(\\d{1,2})[.:](\\d{2})';
   const afterClass = new RegExp(
-    `${klass}\\s*:?\\s*(?:kl\\.?\\s*)?${time}\\s*[-–]\\s*${time}`,
+    `${klass}[ \\t]*:?[ \\t]*(?:kl\\.?[ \\t]*)?${time}[ \\t]*[-–][ \\t]*${time}`,
     'gi',
   );
   const beforeClass = new RegExp(
-    `${time}\\s*[-–]\\s*${time}\\s+${klass}(?![0-9A-Za-zÆØÅæøå])`,
+    `${time}[ \\t]*[-–][ \\t]*${time}[ \\t]+${klass}(?![0-9A-Za-zÆØÅæøå])`,
     'gi',
   );
   const result: Array<{ start: string; end: string; evidence: string }> = [];
