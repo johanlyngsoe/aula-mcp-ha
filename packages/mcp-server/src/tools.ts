@@ -2292,10 +2292,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             ? thread.subject
             : '';
 
-        if (
-          subject &&
-          hasExpiredExplicitDanishEventDate(subject)
-        ) {
+        if (subject && hasExpiredExplicitDanishEventDate(subject)) {
           return false;
         }
 
