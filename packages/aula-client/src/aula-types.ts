@@ -25,6 +25,8 @@ export interface AulaProfileChild {
    *  of letters and digits — looks like `"abcd1234"`); upstream Python
    *  stringifies it (`str(child["userId"])`). Treat as opaque, don't parse. */
   userId?: string | number;
+  /** Current class/group label supplied by Aula, e.g. "3A". */
+  metadata?: string;
   institutionProfile?: AulaInstitutionProfile;
 }
 

@@ -221,6 +221,81 @@ function formatCopenhagenDate(d: Date): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+export function hasExpiredExplicitDanishEventDate(
+  value: string,
+  referenceDate: Date = new Date(),
+): boolean {
+  const normalized = value
+    .toLocaleLowerCase('da-DK')
+    .replace(/\\([./-])/g, '$1');
+
+  const numeric = normalized.match(
+    /\b(?:d\.?\s*)?(\d{1,2})\s*[./-]\s*(\d{1,2})(?:\s*[./-]\s*(\d{2}|\d{4}))?\b/i,
+  );
+
+  const monthNumbers: Record<string, number> = {
+    januar: 1,
+    februar: 2,
+    marts: 3,
+    april: 4,
+    maj: 5,
+    juni: 6,
+    juli: 7,
+    august: 8,
+    september: 9,
+    oktober: 10,
+    november: 11,
+    december: 12,
+  };
+
+  const named = normalized.match(
+    /\b(?:d\.?\s*)?(\d{1,2})\.?\s+(januar|februar|marts|april|maj|juni|juli|august|september|oktober|november|december)(?:\s+(\d{4}))?\b/i,
+  );
+
+  if (!numeric && !named) return false;
+
+  const day = Number((numeric ?? named)?.[1]);
+  const month = numeric
+    ? Number(numeric[2])
+    : monthNumbers[named![2]];
+  const explicitYearRaw = (numeric ?? named)?.[3];
+
+  const todayText = formatCopenhagenDate(referenceDate);
+  const [todayYear, todayMonth, todayDay] = todayText
+    .split('-')
+    .map(Number);
+
+  let year = explicitYearRaw
+    ? Number(explicitYearRaw)
+    : todayYear;
+
+  if (year < 100) year += 2000;
+
+  const eventDate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    eventDate.getUTCFullYear() !== year ||
+    eventDate.getUTCMonth() !== month - 1 ||
+    eventDate.getUTCDate() !== day
+  ) {
+    return false;
+  }
+
+  const today = new Date(Date.UTC(todayYear, todayMonth - 1, todayDay));
+  let differenceInDays =
+    (eventDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000);
+
+  // A yearless January date mentioned in December normally refers to the
+  // coming year, not an event eleven months in the past.
+  if (!explicitYearRaw && differenceInDays < -183) {
+    eventDate.setUTCFullYear(eventDate.getUTCFullYear() + 1);
+    differenceInDays =
+      (eventDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000);
+  }
+
+  return differenceInDays < 0;
+}
+
 function resolveRelativePostDate(
   post: Record<string, unknown>,
 ): ResolvedRelativeDate | undefined {
@@ -1338,6 +1413,16 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         ? discover.children
         : [];
 
+      const childProfiles = children.map((child) => ({
+        name: child.name,
+        ...(typeof child.className === 'string'
+          ? { className: child.className }
+          : {}),
+        ...(typeof child.institution?.id === 'number'
+          ? { institutionProfileId: child.institution.id }
+          : {}),
+      }));
+
       // ------------------------------------------------------------
       // Meebook week-plan attention data
       //
@@ -1930,7 +2015,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             ? message.subject
             : '';
 
-        return actionSubjectPattern.test(subject);
+        return (
+          actionSubjectPattern.test(subject) &&
+          !hasExpiredExplicitDanishEventDate(subject)
+        );
       });
 
       const guardianProfileIdsForMessages = new Set<number>(
@@ -2376,6 +2464,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           shared: sharedPosts,
         },
         actionCandidates: {
+          children: childProfiles,
           calendar: calendarActionCandidates,
           calendarInvitations,
           posts: {
