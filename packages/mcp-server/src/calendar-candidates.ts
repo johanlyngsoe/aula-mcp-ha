@@ -48,7 +48,10 @@ const SPECIAL_ACTIVITY_PATTERNS: Array<[
   CalendarCandidate['activityType'],
   RegExp,
 ]> = [
-  ['school_photography', /\b(foto(?:graf(?:ering)?)?|skoleportræt|portrætfoto)\b/i],
+  [
+    'school_photography',
+    /\b(foto(?:graf(?:ering)?)?|skolefoto|skoleportræt|portrætfoto)\b/i,
+  ],
   ['school_camp', /\blejrskole\b/i],
   ['cinema_trip', /\b(biograf(?:tur)?|biograftur)\b/i],
   ['cycling_day', /\b(cykeldag|cykeltur)\b/i],
@@ -221,7 +224,9 @@ function resolveDanishDate(value: string, now: Date): string | undefined {
   const iso = value.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  const numeric = value.match(/\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{4}))?\b/);
+  const numeric = value.match(
+    /\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{4}))?\b/,
+  );
   const named = value
     .toLocaleLowerCase('da-DK')
     .match(
