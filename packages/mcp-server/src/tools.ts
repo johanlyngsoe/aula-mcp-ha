@@ -22,6 +22,7 @@ import {
 } from './calendar-range.ts';
 import { buildCalendarCandidates } from './calendar-candidates.ts';
 import { buildDiscoverManifest } from './discover.ts';
+import { buildManualActionCandidates } from './manual-action-candidates.ts';
 
 function jsonContent(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
@@ -2321,6 +2322,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         );
       });
 
+      const manualActionCandidates = buildManualActionCandidates(
+        messageThreads as Array<Record<string, unknown>>,
+      );
+
       // ------------------------------------------------------------
       // Deterministic action candidates
       //
@@ -2523,6 +2528,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         },
         actionCandidates: {
           messages: messageActionCandidates,
+          manualActions: manualActionCandidates,
         },
       };
 
@@ -2547,6 +2553,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return jsonContent({
           actionCandidates: {
             messages: messageActionCandidates,
+            manualActions: manualActionCandidates,
           },
           messageThreads,
           _meta: meta,
@@ -2559,6 +2566,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         actionCandidates: {
           ...schoolPayload.actionCandidates,
           messages: messageActionCandidates,
+          manualActions: manualActionCandidates,
         },
         _meta: meta,
       });
