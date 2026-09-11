@@ -40,15 +40,13 @@ function strings(value: unknown): string[] {
 function messageDetail(value: unknown): string {
   if (!Array.isArray(value)) return '';
 
-  return value
-    .flatMap((message) => {
-      if (!message || typeof message !== 'object') return [];
-      const text = (message as Record<string, unknown>).text;
-      return typeof text === 'string' && text.trim() ? [text.trim()] : [];
-    })
-    .slice(-3)
-    .join('\n\n')
-    .slice(0, 4000);
+  const messages = value.flatMap((message) => {
+    if (!message || typeof message !== 'object') return [];
+    const text = (message as Record<string, unknown>).text;
+    return typeof text === 'string' && text.trim() ? [text.trim()] : [];
+  });
+
+  return (messages.at(-1) || '').slice(0, 360);
 }
 
 function actionType(value: string): ManualActionCandidate['actionType'] {
