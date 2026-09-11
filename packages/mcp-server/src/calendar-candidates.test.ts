@@ -74,6 +74,7 @@ describe('buildCalendarCandidates', () => {
 
   test('derives photography time from dynamic class and week-plan date', () => {
     const candidates = buildCalendarCandidates({
+      now: new Date('2026-09-11T10:00:00+02:00'),
       children: [
         { name: 'Barn A', className: '3.a' },
         { name: 'Barn B', className: '1C' },
@@ -83,16 +84,16 @@ describe('buildCalendarCandidates', () => {
       weekPlanByChild: {
         'Barn A': [
           {
-            resolvedDate: '2026-09-15',
+            resolvedDate: 'tirsdag 15. sep.',
             subject: 'Foto',
-            content: 'Klassen fotograferes.',
+            content: 'Foto: 3.a skal fotograferes kl. 10.30.',
           },
         ],
         'Barn B': [
           {
-            resolvedDate: '2026-09-16',
+            resolvedDate: 'onsdag 16. sep.',
             subject: 'Fotografering',
-            content: 'Klassen fotograferes.',
+            content: 'Skolefoto: 1.c: 10.30 - 11.15',
           },
         ],
       },
@@ -104,8 +105,10 @@ describe('buildCalendarCandidates', () => {
           attachments: [
             {
               text: [
-                '3A tirsdag 10.30 - 11.15',
-                '1 C onsdag 10.30 - 11.15',
+                'Mandag 14/09/2026 Tirsdag 15/09/2026 Onsdag 16/09/2026',
+                '3. lektion 10:30-11:15 Cirkel 2. lektion 10:00-10:30 7B',
+                '3. lektion 10:30-11:15 1C',
+                '4. lektion 11:50-12:30 8A 3. lektion 10:30-11:15 3A',
               ].join('\n'),
             },
           ],
@@ -139,12 +142,13 @@ describe('buildCalendarCandidates', () => {
 
   test('does not create photography when the dynamic class row is ambiguous', () => {
     const candidates = buildCalendarCandidates({
+      now: new Date('2026-09-11T10:00:00+02:00'),
       children: [{ name: 'Barn A', className: '3A' }],
       calendar: {},
       calendarInvitations: [],
       weekPlanByChild: {
         'Barn A': [
-          { resolvedDate: '2026-09-15', title: 'Fotografering' },
+          { resolvedDate: 'tirsdag 15. sep.', title: 'Fotografering' },
         ],
       },
       postsByChild: {},
