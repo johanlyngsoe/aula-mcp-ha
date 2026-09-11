@@ -21,6 +21,8 @@ export interface DiscoveredChild {
   /** The Aula institution-profile id used by API methods like getDailyOverview.
    *  Aula returns this as either a number or an opaque string token. */
   userId?: string | number;
+  /** Current class/group label supplied by Aula, e.g. "3A". */
+  className?: string;
   institution?: {
     id: number;
     name?: string;
@@ -122,6 +124,12 @@ export async function buildDiscoverManifest(context: AulaContext): Promise<Disco
       const inst = child.institutionProfile;
       const item: DiscoveredChild = { id: child.id, name: child.name };
       if (child.userId !== undefined) item.userId = child.userId;
+      if (
+        typeof inst?.metadata === 'string' &&
+        inst.metadata.trim().length > 0
+      ) {
+        item.className = inst.metadata.trim();
+      }
       if (inst) {
         const institution: DiscoveredChild['institution'] = { id: inst.id };
         if (inst.institutionName !== undefined) institution.name = inst.institutionName;

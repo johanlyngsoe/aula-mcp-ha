@@ -31,6 +31,8 @@ export interface AulaProfileChild {
 export interface AulaInstitutionProfile {
   id: number;
   name?: string;
+  /** Current class/group label supplied by Aula, e.g. "3A". */
+  metadata?: string;
   /** Aula's institution code, e.g. "G12345". */
   institutionCode?: string;
   institutionName?: string;
