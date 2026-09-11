@@ -19,12 +19,12 @@ export interface CalendarCandidate {
     | 'school_party'
     | 'birthday_invitation';
   title: string;
-  start?: string;
-  end?: string;
-  location?: string;
-  description?: string;
-  details?: string;
-  responseStatus?: string;
+  start: string | null;
+  end: string | null;
+  location: string | null;
+  description: string | null;
+  details: string | null;
+  responseStatus: string | null;
   confidence: 'deterministic';
   validation: {
     state: CalendarValidationState;
@@ -90,7 +90,7 @@ function classifySpecialActivity(
   )?.[0];
 }
 
-function validationFor(start?: string, end?: string): {
+function validationFor(start?: string | null, end?: string | null): {
   state: CalendarValidationState;
   reasons: string[];
 } {
@@ -114,23 +114,54 @@ function validationFor(start?: string, end?: string): {
   };
 }
 
-function makeCandidate(
-  value: Omit<CalendarCandidate, 'fingerprint' | 'confidence' | 'validation'>,
-): CalendarCandidate {
-  const validation = validationFor(value.start, value.end);
+type CalendarCandidateDraft = Omit<
+  CalendarCandidate,
+  | 'fingerprint'
+  | 'confidence'
+  | 'validation'
+  | 'start'
+  | 'end'
+  | 'location'
+  | 'description'
+  | 'details'
+  | 'responseStatus'
+> &
+  Partial<
+    Pick<
+      CalendarCandidate,
+      | 'start'
+      | 'end'
+      | 'location'
+      | 'description'
+      | 'details'
+      | 'responseStatus'
+    >
+  >;
+
+function makeCandidate(value: CalendarCandidateDraft): CalendarCandidate {
+  const normalized = {
+    ...value,
+    start: value.start ?? null,
+    end: value.end ?? null,
+    location: value.location ?? null,
+    description: value.description ?? null,
+    details: value.details ?? null,
+    responseStatus: value.responseStatus ?? null,
+  };
+  const validation = validationFor(normalized.start, normalized.end);
   const fingerprint = canonicalHash([
-    value.source,
-    value.sourceId,
-    value.child,
-    value.activityType,
-    value.title,
-    value.start,
-    value.end,
-    value.location,
+    normalized.source,
+    normalized.sourceId,
+    normalized.child,
+    normalized.activityType,
+    normalized.title,
+    normalized.start,
+    normalized.end,
+    normalized.location,
   ]);
 
   return {
-    ...value,
+    ...normalized,
     fingerprint,
     confidence: 'deterministic',
     validation,
