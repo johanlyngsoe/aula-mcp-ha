@@ -25,14 +25,14 @@ export interface AulaProfileChild {
    *  of letters and digits — looks like `"abcd1234"`); upstream Python
    *  stringifies it (`str(child["userId"])`). Treat as opaque, don't parse. */
   userId?: string | number;
-  /** Current class/group label supplied by Aula, e.g. "3A". */
-  metadata?: string;
   institutionProfile?: AulaInstitutionProfile;
 }
 
 export interface AulaInstitutionProfile {
   id: number;
   name?: string;
+  /** Current class/group label supplied by Aula, e.g. "3A". */
+  metadata?: string;
   /** Aula's institution code, e.g. "G12345". */
   institutionCode?: string;
   institutionName?: string;

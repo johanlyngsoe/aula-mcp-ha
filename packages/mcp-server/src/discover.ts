@@ -125,10 +125,10 @@ export async function buildDiscoverManifest(context: AulaContext): Promise<Disco
       const item: DiscoveredChild = { id: child.id, name: child.name };
       if (child.userId !== undefined) item.userId = child.userId;
       if (
-        typeof child.metadata === 'string' &&
-        child.metadata.trim().length > 0
+        typeof inst?.metadata === 'string' &&
+        inst.metadata.trim().length > 0
       ) {
-        item.className = child.metadata.trim();
+        item.className = inst.metadata.trim();
       }
       if (inst) {
         const institution: DiscoveredChild['institution'] = { id: inst.id };
