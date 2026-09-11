@@ -45,7 +45,7 @@ describe('buildManualActionCandidates', () => {
     });
     expect(firstCandidate.fingerprint).toHaveLength(24);
     expect(secondCandidate.fingerprint).toBe(firstCandidate.fingerprint);
-    expect(secondCandidate.detail).toBe('Test\n\nReminder');
+    expect(secondCandidate.detail).toBe('Reminder');
   });
 
   test('keeps ambiguous child binding visible for explicit user choice', () => {
@@ -68,5 +68,19 @@ describe('buildManualActionCandidates', () => {
         { threadId: 12, error: 'step_up_required' },
       ]),
     ).toEqual([]);
+  });
+
+  test('bounds message detail so the complete candidate list can be relayed', () => {
+    const [candidate] = buildManualActionCandidates([
+      {
+        threadId: 77,
+        subject: 'Lang besked',
+        appliesToChildren: ['Barn A'],
+        messages: [{ text: 'x'.repeat(2000) }],
+      },
+    ]);
+    if (!candidate) throw new Error('missing candidate');
+
+    expect(candidate.detail).toHaveLength(360);
   });
 });
