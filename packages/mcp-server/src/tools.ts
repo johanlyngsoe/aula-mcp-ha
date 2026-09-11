@@ -20,6 +20,7 @@ import {
   resolveCalendarRange,
   startOfDayCopenhagen,
 } from './calendar-range.ts';
+import { buildCalendarCandidates } from './calendar-candidates.ts';
 import { buildDiscoverManifest } from './discover.ts';
 
 function jsonContent(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
@@ -2485,6 +2486,15 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           .filter(isActionPost)
           .map(withResolvedRelativeDate);
 
+      const calendarCandidates = buildCalendarCandidates({
+        children: childProfiles,
+        calendar: calendarActionCandidates,
+        calendarInvitations,
+        weekPlanByChild: weekPlanActionCandidatesByChild,
+        postsByChild: postActionCandidatesByChild,
+        sharedPosts: sharedPostActionCandidates,
+      });
+
       const schoolPayload = {
         children: schedule,
         posts: {
@@ -2495,6 +2505,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
           children: childProfiles,
           calendar: calendarActionCandidates,
           calendarInvitations,
+          calendarCandidates,
           posts: {
             byChild: postActionCandidatesByChild,
             shared: sharedPostActionCandidates,
