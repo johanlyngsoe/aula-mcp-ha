@@ -1868,7 +1868,11 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       mergedPosts.sort((a, b) => dateOf(b) - dateOf(a));
 
-      const selectedPosts = mergedPosts.slice(0, postLimit);
+      // Keep a wider discovery window than the requested attention output limit.
+      // Otherwise actionable posts can disappear simply because newer posts from
+      // other Aula groups occupy the first postLimit positions.
+      const postDiscoveryLimit = Math.max(postLimit, 50);
+      const selectedPosts = mergedPosts.slice(0, postDiscoveryLimit);
       const compactedPosts = selectedPosts.map(compactPost);
 
       // Attention summaries normally use compact post metadata only. For
