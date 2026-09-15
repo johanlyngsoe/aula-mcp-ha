@@ -22,7 +22,10 @@ import {
 } from './calendar-range.ts';
 import { buildCalendarCandidates } from './calendar-candidates.ts';
 import { buildDiscoverManifest } from './discover.ts';
-import { buildManualActionCandidates } from './manual-action-candidates.ts';
+import {
+  buildManualActionCandidates,
+  buildPostManualActionCandidates,
+} from './manual-action-candidates.ts';
 
 function jsonContent(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
@@ -2354,7 +2357,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         );
       });
 
-      const manualActionCandidates = buildManualActionCandidates(
+      const messageManualActionCandidates = buildManualActionCandidates(
         messageThreads as Array<Record<string, unknown>>,
       );
 
@@ -2532,6 +2535,16 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         sharedPosts: sharedPostActionCandidates,
       });
 
+      const postManualActionCandidates = buildPostManualActionCandidates([
+        ...Object.values(postActionCandidatesByChild).flat(),
+        ...sharedPostActionCandidates,
+      ]);
+
+      const manualActionCandidates = [
+        ...messageManualActionCandidates,
+        ...postManualActionCandidates,
+      ];
+
       const schoolPayload = {
         children: schedule,
         posts: {
@@ -2576,7 +2589,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       if (mode === 'school') {
         return jsonContent({
-          actionCandidates: schoolPayload.actionCandidates,
+          actionCandidates: {
+            ...schoolPayload.actionCandidates,
+            manualActions: postManualActionCandidates,
+          },
           _meta: meta,
         });
       }
@@ -2585,7 +2601,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return jsonContent({
           actionCandidates: {
             messages: messageActionCandidates,
-            manualActions: manualActionCandidates,
+            manualActions: messageManualActionCandidates,
           },
           messageThreads,
           _meta: meta,
