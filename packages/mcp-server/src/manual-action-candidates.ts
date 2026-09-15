@@ -53,7 +53,15 @@ function messageDetail(value: unknown): string {
 function attachmentText(value: unknown, priorityTerms: string[] = []): string {
   if (!Array.isArray(value)) return '';
 
-  const terms = priorityTerms.map((term) => term.trim().toLocaleLowerCase('da-DK')).filter(Boolean);
+  const terms = [
+    ...new Set(
+      priorityTerms.flatMap((term) => {
+        const normalized = term.trim().toLocaleLowerCase('da-DK');
+        if (!normalized) return [];
+        return [normalized, ...normalized.split(/\s+/).filter((part) => part.length >= 3)];
+      }),
+    ),
+  ];
   const texts = value.flatMap((attachment, index) => {
     if (!attachment || typeof attachment !== 'object') return [];
     const text = (attachment as Record<string, unknown>).text;
