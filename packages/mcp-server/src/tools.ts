@@ -22,7 +22,10 @@ import {
 } from './calendar-range.ts';
 import { buildCalendarCandidates } from './calendar-candidates.ts';
 import { buildDiscoverManifest } from './discover.ts';
-import { buildManualActionCandidates } from './manual-action-candidates.ts';
+import {
+  buildManualActionCandidates,
+  buildPostManualActionCandidates,
+} from './manual-action-candidates.ts';
 
 function jsonContent(data: unknown): { content: Array<{ type: 'text'; text: string }> } {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
@@ -45,6 +48,33 @@ export function isWeekPlanActionText(value: string): boolean {
 
 export function isPostActionText(value: string): boolean {
   return POST_ACTION_PATTERN.test(value);
+}
+
+export function isPostManualActionCandidate(
+  post: Record<string, unknown>,
+): boolean {
+  const title = typeof post.title === 'string' ? post.title : '';
+  const body = typeof post.text === 'string' ? post.text : '';
+
+  const attachments = Array.isArray(post.attachments)
+    ? post.attachments
+    : [];
+
+  const attachmentText = attachments
+    .map((attachment) => {
+      if (!attachment || typeof attachment !== 'object') return '';
+
+      const candidate = attachment as Record<string, unknown>;
+      return typeof candidate.text === 'string' ? candidate.text : '';
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  const source = `${title}\n${body}\n${attachmentText}`;
+
+  return /(forældrene?\s+skal|\bI\s+skal\b|barnet\s+skal|eleverne?\s+skal|skal\s+(?:hjælpe|forberede|øve|medbringe|have\s+med|sende|svare|betale|tilmelde)|hjælp(?:e)?\s+.+\s+med\s+at|forbered(?:e|else)|øv(?:e|else)|medbring|husk\s+at|tilmeld|betaling|betal|deadline|frist|svar\s+(?:senest|inden)|udfyld|underskriv)/i.test(
+    source,
+  );
 }
 
 export function isPostActionCandidate(
@@ -2354,7 +2384,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         );
       });
 
-      const manualActionCandidates = buildManualActionCandidates(
+      const messageManualActionCandidates = buildManualActionCandidates(
         messageThreads as Array<Record<string, unknown>>,
       );
 
@@ -2532,6 +2562,18 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         sharedPosts: sharedPostActionCandidates,
       });
 
+      const postManualActionCandidates = buildPostManualActionCandidates(
+        [
+          ...Object.values(postActionCandidatesByChild).flat(),
+          ...sharedPostActionCandidates,
+        ].filter(isPostManualActionCandidate),
+      );
+
+      const manualActionCandidates = [
+        ...messageManualActionCandidates,
+        ...postManualActionCandidates,
+      ];
+
       const schoolPayload = {
         children: schedule,
         posts: {
@@ -2576,7 +2618,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       if (mode === 'school') {
         return jsonContent({
-          actionCandidates: schoolPayload.actionCandidates,
+          actionCandidates: {
+            ...schoolPayload.actionCandidates,
+            manualActions: postManualActionCandidates,
+          },
           _meta: meta,
         });
       }
@@ -2585,7 +2630,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         return jsonContent({
           actionCandidates: {
             messages: messageActionCandidates,
-            manualActions: manualActionCandidates,
+            manualActions: messageManualActionCandidates,
           },
           messageThreads,
           _meta: meta,

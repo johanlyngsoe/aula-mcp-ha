@@ -3,6 +3,7 @@ import {
   hasExpiredExplicitDanishEventDate,
   isPostActionCandidate,
   isPostActionText,
+  isPostManualActionCandidate,
   isWeekPlanActionText,
 } from './tools.ts';
 
@@ -30,6 +31,36 @@ describe('Aula attention filters', () => {
         ],
       }),
     ).toBe(true);
+  });
+
+  test('treats Ugens Professor as a manual family action', () => {
+    expect(
+      isPostManualActionCandidate({
+        title: 'Ugens Professor',
+        text: 'Forældrene skal hjælpe barnet med at forberede sin præsentation.',
+        attachments: [
+          {
+            name: 'Ugens Professor 3.a endeligt dokument.docx',
+            text: '48  Mikkeline',
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  test('does not turn an informational post into a manual action just because it has a readable attachment', () => {
+    expect(
+      isPostManualActionCandidate({
+        title: 'Nyt fra skolen',
+        text: 'Her er information om den kommende periode.',
+        attachments: [
+          {
+            name: 'information.pdf',
+            text: 'Praktisk information om skolen og årets aktiviteter.',
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 
   test('does not keep a plain post without action text or extracted attachment text', () => {

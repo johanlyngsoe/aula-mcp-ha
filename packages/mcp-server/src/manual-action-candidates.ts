@@ -3,8 +3,9 @@ import { createHash } from 'node:crypto';
 export interface ManualActionCandidate {
   sourceId: string;
   fingerprint: string;
-  source: 'aula-message-thread';
-  threadId: number;
+  source: 'aula-message-thread' | 'aula-post';
+  threadId?: number;
+  postId?: number;
   subject: string | null;
   title: string;
   detail: string;
@@ -47,6 +48,19 @@ function messageDetail(value: unknown): string {
   });
 
   return (messages.at(-1) || '').slice(0, 360);
+}
+
+function attachmentText(value: unknown): string {
+  if (!Array.isArray(value)) return '';
+
+  return value
+    .flatMap((attachment) => {
+      if (!attachment || typeof attachment !== 'object') return [];
+      const text = (attachment as Record<string, unknown>).text;
+      return typeof text === 'string' && text.trim() ? [text.trim()] : [];
+    })
+    .join('\n')
+    .slice(0, 360);
 }
 
 function actionType(value: string): ManualActionCandidate['actionType'] {
@@ -102,5 +116,47 @@ export function buildManualActionCandidates(
         },
       },
     ];
+  });
+}
+
+export function buildPostManualActionCandidates(
+  posts: Array<Record<string, unknown>>,
+): ManualActionCandidate[] {
+  return posts.flatMap((post) => {
+    const postId = typeof post.id === 'number' ? post.id : Number(post.id);
+    if (!Number.isFinite(postId) || postId < 1 || 'error' in post) return [];
+
+    const sourceId = `post:${postId}`;
+    const childSpecific =
+      typeof post.appliesToChild === 'string' && post.appliesToChild.trim()
+        ? [post.appliesToChild.trim()]
+        : [];
+    const appliesToChildren = childSpecific.length
+      ? childSpecific
+      : strings(post.appliesToChildren ?? post.children);
+    const reasons = appliesToChildren.length > 0 ? [] : ['missing_child_binding'];
+    const title =
+      typeof post.title === 'string' && post.title.trim() ? post.title.trim() : 'Aula-opslag';
+    const body = typeof post.text === 'string' && post.text.trim() ? post.text.trim() : '';
+    const extracted = attachmentText(post.attachments);
+    const detail = ([body, extracted].filter(Boolean).join('\n') || title).slice(0, 360);
+
+    return [{
+      sourceId,
+      fingerprint: hash([sourceId]),
+      source: 'aula-post' as const,
+      postId,
+      subject: null,
+      title,
+      detail,
+      actionType: actionType(`${title}\n${body}\n${extracted}`),
+      suggestedEvent: { title, start: null, end: null, location: null },
+      appliesToChildren,
+      confidence: 'source_identity' as const,
+      validation: {
+        state: reasons.length === 0 ? ('valid' as const) : ('needs_child' as const),
+        reasons,
+      },
+    }];
   });
 }

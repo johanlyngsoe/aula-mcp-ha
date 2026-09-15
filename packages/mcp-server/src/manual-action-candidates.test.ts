@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { buildManualActionCandidates } from './manual-action-candidates.ts';
+import {
+  buildManualActionCandidates,
+  buildPostManualActionCandidates,
+} from './manual-action-candidates.ts';
 
 describe('buildManualActionCandidates', () => {
   test('adds stable source identity without interpreting message semantics', () => {
@@ -82,5 +85,53 @@ describe('buildManualActionCandidates', () => {
     if (!candidate) throw new Error('missing candidate');
 
     expect(candidate.detail).toHaveLength(360);
+  });
+});
+
+describe('buildPostManualActionCandidates', () => {
+  test('creates stable post identity and keeps extracted attachment-backed context', () => {
+    const post = {
+      id: 13539317,
+      title: 'Ugens Professor',
+      text: 'Forældrene skal hjælpe barnet med at forberede sin præsentation.',
+      appliesToChild: 'Mikkeline Korsgaard Lyngsø',
+      attachments: [
+        { name: 'Ugens Professor 3.a endeligt dokument.docx', text: '48  Mikkeline' },
+      ],
+    };
+
+    const first = buildPostManualActionCandidates([post]);
+    const second = buildPostManualActionCandidates([{ ...post, text: `${post.text} Husk at øve.` }]);
+
+    expect(first).toHaveLength(1);
+    const candidate = first[0];
+    if (!candidate || !second[0]) throw new Error('missing candidate');
+
+    expect(candidate).toMatchObject({
+      sourceId: 'post:13539317',
+      source: 'aula-post',
+      postId: 13539317,
+      title: 'Ugens Professor',
+      appliesToChildren: ['Mikkeline Korsgaard Lyngsø'],
+      confidence: 'source_identity',
+      validation: { state: 'valid', reasons: [] },
+    });
+    expect(candidate.detail).toContain('48  Mikkeline');
+    expect(candidate.fingerprint).toHaveLength(24);
+    expect(second[0].fingerprint).toBe(candidate.fingerprint);
+  });
+
+  test('supports shared post child bindings and flags missing child binding', () => {
+    const [shared] = buildPostManualActionCandidates([
+      { id: 44, title: 'Fælles opslag', appliesToChildren: ['Barn B', 'Barn A'] },
+    ]);
+    const [ambiguous] = buildPostManualActionCandidates([{ id: 45, title: 'Ukendt barn' }]);
+
+    expect(shared?.appliesToChildren).toEqual(['Barn A', 'Barn B']);
+    expect(shared?.validation).toEqual({ state: 'valid', reasons: [] });
+    expect(ambiguous?.validation).toEqual({
+      state: 'needs_child',
+      reasons: ['missing_child_binding'],
+    });
   });
 });
