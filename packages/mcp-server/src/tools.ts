@@ -1858,6 +1858,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       const dateOf = (post: Record<string, unknown>): number => {
         const raw =
+          (post.publishedAt as string | undefined) ??
           (post.publishAt as string | undefined) ??
           (post.timestamp as string | undefined) ??
           (post.createdAt as string | undefined) ??
