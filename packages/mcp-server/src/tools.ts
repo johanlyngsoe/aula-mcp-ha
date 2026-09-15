@@ -47,6 +47,34 @@ export function isPostActionText(value: string): boolean {
   return POST_ACTION_PATTERN.test(value);
 }
 
+export function isPostActionCandidate(
+  post: Record<string, unknown>,
+): boolean {
+  const title = typeof post.title === 'string' ? post.title : '';
+  const body = typeof post.text === 'string' ? post.text : '';
+
+  if (isPostActionText(`${title}\n${body}`)) {
+    return true;
+  }
+
+  const attachments = Array.isArray(post.attachments)
+    ? post.attachments
+    : [];
+
+  return attachments.some((attachment) => {
+    if (!attachment || typeof attachment !== 'object') {
+      return false;
+    }
+
+    const candidate = attachment as Record<string, unknown>;
+
+    return (
+      typeof candidate.text === 'string' &&
+      candidate.text.trim().length > 0
+    );
+  });
+}
+
 function normalizeAttachmentText(value: string): string {
   return value
     .replace(/\r\n/g, '\n')
@@ -1876,9 +1904,9 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       const selectedPosts = mergedPosts.slice(0, postDiscoveryLimit);
       const compactedPosts = selectedPosts.map(compactPost);
 
-      // Attention summaries normally use compact post metadata only. For
-      // actionable posts, also extract readable attachment text so details
-      // such as class-specific photography times are not lost in a PDF.
+      // Attention summaries normally use compact post metadata only.
+      // Extract readable attachment text before candidate filtering so a post
+      // can become actionable based on information contained in an attachment.
       await Promise.all(
         selectedPosts.map(async (rawPost, postIndex) => {
           const compactedPost = compactedPosts[postIndex];
@@ -1893,7 +1921,6 @@ export function registerTools(server: McpServer, context: AulaContext): void {
               ? compactedPost.text
               : '';
 
-          if (!isPostActionText(`${title}\n${body}`)) return;
 
           const rawAttachments = Array.isArray(rawPost.attachments)
             ? rawPost.attachments
@@ -2461,7 +2488,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
             ? post.text
             : '';
 
-        return isPostActionText(`${title}\n${body}`);
+        return isPostActionCandidate(post);
       };
 
       const withResolvedRelativeDate = (

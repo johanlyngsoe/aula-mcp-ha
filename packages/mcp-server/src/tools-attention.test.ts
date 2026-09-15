@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   hasExpiredExplicitDanishEventDate,
+  isPostActionCandidate,
   isPostActionText,
   isWeekPlanActionText,
 } from './tools.ts';
@@ -13,6 +14,32 @@ describe('Aula attention filters', () => {
   test('keeps photography posts so their attachments can be read', () => {
     expect(isPostActionText('Fotografering uge 38')).toBe(true);
     expect(isPostActionText('Årets skoleportræt')).toBe(true);
+  });
+
+  test('keeps a post with readable attachment text even when title/body do not match keywords', () => {
+    expect(
+      isPostActionCandidate({
+        title: 'Ugens Professor',
+        text: 'Kære forældre. Se de vedhæftede dokumenter.',
+        attachments: [
+          {
+            name: 'Ugens Professor 3.a endeligt dokument.docx',
+            readable: true,
+            text: 'Uge 48 Mikkeline',
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  test('does not keep a plain post without action text or extracted attachment text', () => {
+    expect(
+      isPostActionCandidate({
+        title: 'Nyt fra klassen',
+        text: 'Tak for en god uge.',
+        attachments: [],
+      }),
+    ).toBe(false);
   });
 
   test('still excludes ordinary non-actionable lesson text', () => {
