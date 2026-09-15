@@ -72,7 +72,7 @@ export function isPostManualActionCandidate(
 
   const source = `${title}\n${body}\n${attachmentText}`;
 
-  return /(forældrene?\s+skal|I\s+skal|barnet\s+skal|eleverne?\s+skal|skal\s+(?:hjælpe|forberede|øve|medbringe|have\s+med|sende|svare|betale|tilmelde)|hjælp(?:e)?\s+.+\s+med\s+at|forbered(?:e|else)|øv(?:e|else)|medbring|husk\s+at|tilmeld|betaling|betal|deadline|frist|svar\s+(?:senest|inden)|udfyld|underskriv)/i.test(
+  return /(forældrene?\s+skal|\bI\s+skal\b|barnet\s+skal|eleverne?\s+skal|skal\s+(?:hjælpe|forberede|øve|medbringe|have\s+med|sende|svare|betale|tilmelde)|hjælp(?:e)?\s+.+\s+med\s+at|forbered(?:e|else)|øv(?:e|else)|medbring|husk\s+at|tilmeld|betaling|betal|deadline|frist|svar\s+(?:senest|inden)|udfyld|underskriv)/i.test(
     source,
   );
 }

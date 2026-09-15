@@ -116,6 +116,7 @@ describe('buildPostManualActionCandidates', () => {
       confidence: 'source_identity',
       validation: { state: 'valid', reasons: [] },
     });
+    expect(candidate.detail).toContain('48  Mikkeline');
     expect(candidate.fingerprint).toHaveLength(24);
     expect(second[0].fingerprint).toBe(candidate.fingerprint);
   });

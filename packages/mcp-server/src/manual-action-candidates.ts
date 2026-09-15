@@ -139,7 +139,7 @@ export function buildPostManualActionCandidates(
       typeof post.title === 'string' && post.title.trim() ? post.title.trim() : 'Aula-opslag';
     const body = typeof post.text === 'string' && post.text.trim() ? post.text.trim() : '';
     const extracted = attachmentText(post.attachments);
-    const detail = (body || extracted || title).slice(0, 360);
+    const detail = ([body, extracted].filter(Boolean).join('\n') || title).slice(0, 360);
 
     return [{
       sourceId,
