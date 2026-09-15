@@ -50,17 +50,37 @@ function messageDetail(value: unknown): string {
   return (messages.at(-1) || '').slice(0, 360);
 }
 
-function attachmentText(value: unknown): string {
+function attachmentText(value: unknown, priorityTerms: string[] = []): string {
   if (!Array.isArray(value)) return '';
 
-  return value
-    .flatMap((attachment) => {
-      if (!attachment || typeof attachment !== 'object') return [];
-      const text = (attachment as Record<string, unknown>).text;
-      return typeof text === 'string' && text.trim() ? [text.trim()] : [];
-    })
+  const terms = [
+    ...new Set(
+      priorityTerms.flatMap((term) => {
+        const normalized = term.trim().toLocaleLowerCase('da-DK');
+        if (!normalized) return [];
+        return [normalized, ...normalized.split(/\s+/).filter((part) => part.length >= 3)];
+      }),
+    ),
+  ];
+  const texts = value.flatMap((attachment, index) => {
+    if (!attachment || typeof attachment !== 'object') return [];
+    const text = (attachment as Record<string, unknown>).text;
+    if (typeof text !== 'string' || !text.trim()) return [];
+
+    const trimmed = text.trim();
+    const normalized = trimmed.toLocaleLowerCase('da-DK');
+    return [{
+      text: trimmed,
+      index,
+      priority: terms.some((term) => normalized.includes(term)) ? 1 : 0,
+    }];
+  });
+
+  return texts
+    .sort((a, b) => b.priority - a.priority || a.index - b.index)
+    .map(({ text }) => text.slice(0, 180))
     .join('\n')
-    .slice(0, 360);
+    .slice(0, 180);
 }
 
 function actionType(value: string): ManualActionCandidate['actionType'] {
@@ -138,8 +158,9 @@ export function buildPostManualActionCandidates(
     const title =
       typeof post.title === 'string' && post.title.trim() ? post.title.trim() : 'Aula-opslag';
     const body = typeof post.text === 'string' && post.text.trim() ? post.text.trim() : '';
-    const extracted = attachmentText(post.attachments);
-    const detail = ([body, extracted].filter(Boolean).join('\n') || title).slice(0, 360);
+    const extracted = attachmentText(post.attachments, appliesToChildren);
+    const detailParts = [body.slice(0, 179), extracted].filter(Boolean);
+    const detail = (detailParts.join('\n') || title).slice(0, 360);
 
     return [{
       sourceId,

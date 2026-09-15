@@ -121,6 +121,25 @@ describe('buildPostManualActionCandidates', () => {
     expect(second[0].fingerprint).toBe(candidate.fingerprint);
   });
 
+  test('reserves detail space for the child-specific attachment when body and other attachments are long', () => {
+    const [candidate] = buildPostManualActionCandidates([
+      {
+        id: 13539317,
+        title: 'Ugens Professor',
+        text: 'Lang opslagstekst '.repeat(40),
+        appliesToChild: 'Mikkeline Korsgaard Lyngsø',
+        attachments: [
+          { name: 'Beskrivelse.pdf', text: 'Generel beskrivelse '.repeat(80) },
+          { name: 'Oversigt.docx', text: '48  Mikkeline' },
+        ],
+      },
+    ]);
+    if (!candidate) throw new Error('missing candidate');
+
+    expect(candidate.detail.length).toBeLessThanOrEqual(360);
+    expect(candidate.detail).toContain('48  Mikkeline');
+  });
+
   test('supports shared post child bindings and flags missing child binding', () => {
     const [shared] = buildPostManualActionCandidates([
       { id: 44, title: 'Fælles opslag', appliesToChildren: ['Barn B', 'Barn A'] },
