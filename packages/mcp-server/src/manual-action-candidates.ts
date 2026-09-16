@@ -50,7 +50,35 @@ function messageDetail(value: unknown): string {
   return (messages.at(-1) || '').slice(0, 360);
 }
 
-function attachmentText(value: unknown, priorityTerms: string[] = []): string {
+const ATTACHMENT_ACTION_PATTERN =
+  /(forældrene?\s+skal|\bI\s+skal\b|barnet\s+skal|eleverne?\s+skal|skal\s+(?:hjælpe|forberede|øve|medbringe|have\s+med|sende|svare|betale|tilmelde)|hjælp(?:e)?\s+.+\s+med\s+at|forbered(?:e|else)|øv(?:e|else)|medbring|husk\s+at|tilmeld|betaling|betal|deadline|frist|svar\s+(?:senest|inden)|udfyld|underskriv)/i;
+
+function contextWindow(text: string, index: number, length = 96): string {
+  if (text.length <= length) return text.trim();
+
+  const half = Math.floor(length / 2);
+  let start = Math.max(0, index - half);
+  let end = Math.min(text.length, start + length);
+  start = Math.max(0, end - length);
+
+  const before = text.lastIndexOf('\n', start);
+  if (before >= 0 && index - before <= half + 24) start = before + 1;
+
+  const after = text.indexOf('\n', end);
+  if (after >= 0 && after - index <= half + 24) end = after;
+
+  return text.slice(start, end).replace(/\s+/g, ' ').trim();
+}
+
+function firstTermIndex(text: string, terms: string[]): number {
+  const normalized = text.toLocaleLowerCase('da-DK');
+  const indexes = terms
+    .map((term) => normalized.indexOf(term))
+    .filter((index) => index >= 0);
+  return indexes.length ? Math.min(...indexes) : -1;
+}
+
+export function attachmentText(value: unknown, priorityTerms: string[] = []): string {
   if (!Array.isArray(value)) return '';
 
   const terms = [
@@ -62,25 +90,47 @@ function attachmentText(value: unknown, priorityTerms: string[] = []): string {
       }),
     ),
   ];
+
   const texts = value.flatMap((attachment, index) => {
     if (!attachment || typeof attachment !== 'object') return [];
     const text = (attachment as Record<string, unknown>).text;
     if (typeof text !== 'string' || !text.trim()) return [];
-
-    const trimmed = text.trim();
-    const normalized = trimmed.toLocaleLowerCase('da-DK');
-    return [{
-      text: trimmed,
-      index,
-      priority: terms.some((term) => normalized.includes(term)) ? 1 : 0,
-    }];
+    return [{ text: text.trim(), index }];
   });
 
-  return texts
-    .sort((a, b) => b.priority - a.priority || a.index - b.index)
-    .map(({ text }) => text.slice(0, 180))
-    .join('\n')
-    .slice(0, 180);
+  const childContexts = texts.flatMap(({ text, index }) => {
+    const matchIndex = firstTermIndex(text, terms);
+    return matchIndex >= 0
+      ? [{ text: contextWindow(text, matchIndex), index }]
+      : [];
+  });
+
+  const actionContexts = texts.flatMap(({ text, index }) => {
+    const match = ATTACHMENT_ACTION_PATTERN.exec(text);
+    return match
+      ? [{ text: contextWindow(text, match.index), index }]
+      : [];
+  });
+
+  const selected = [...childContexts, ...actionContexts]
+    .sort((a, b) => a.index - b.index)
+    .map(({ text }) => text)
+    .filter((text, index, all) => all.indexOf(text) === index);
+
+  if (selected.length === 0) {
+    const fallback = texts.at(0)?.text || '';
+    return fallback.slice(0, 180);
+  }
+
+  const child = childContexts.at(0)?.text;
+  const action = actionContexts.find(({ text }) => text !== child)?.text;
+  const contexts = [child, action].filter((text): text is string => Boolean(text));
+
+  if (contexts.length === 1 && selected.length > 1) {
+    contexts.push(selected.find((text) => text !== contexts[0]) || '');
+  }
+
+  return contexts.filter(Boolean).join('\n').slice(0, 220);
 }
 
 function actionType(value: string): ManualActionCandidate['actionType'] {
@@ -159,7 +209,7 @@ export function buildPostManualActionCandidates(
       typeof post.title === 'string' && post.title.trim() ? post.title.trim() : 'Aula-opslag';
     const body = typeof post.text === 'string' && post.text.trim() ? post.text.trim() : '';
     const extracted = attachmentText(post.attachments, appliesToChildren);
-    const detailParts = [body.slice(0, 179), extracted].filter(Boolean);
+    const detailParts = [body.slice(0, 139), extracted].filter(Boolean);
     const detail = (detailParts.join('\n') || title).slice(0, 360);
 
     return [{
