@@ -1440,12 +1440,12 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         'of independently discovering data for each child when building a family dashboard summary.',
       inputSchema: {
         mode: z
-          .enum(['all', 'school', 'messages'])
+          .enum(['all', 'school', 'messages', 'actions'])
           .optional()
           .describe(
             'Response mode. "school" returns only school/calendar/post attention data, ' +
-            '"messages" returns only message attention data, and "all" returns both. ' +
-            'Defaults to "all".',
+            '"messages" returns only message attention data, "actions" returns only combined ' +
+            'message/post manual actions, and "all" returns both. Defaults to "all".',
           ),
         postLimit: z
           .number()
@@ -1509,7 +1509,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
 
       const weekPlanWarnings: string[] = [];
 
-      if (mode !== 'messages' && children.length > 0) {
+      if (mode !== 'messages' && mode !== 'actions' && children.length > 0) {
         try {
           const record = context.record;
 
@@ -1659,7 +1659,10 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         }
       }
 
-      const schedule = await Promise.all(
+      const schedule =
+        mode === 'actions'
+          ? []
+          : await Promise.all(
         children.map(async (child) => {
           const profileId = child.institution?.id;
 
@@ -1770,7 +1773,7 @@ export function registerTools(server: McpServer, context: AulaContext): void {
       };
 
       const guardianCalendarEvents =
-        guardianProfileIds.length > 0
+        mode !== 'actions' && guardianProfileIds.length > 0
           ? await client.getCalendarEvents({
               profileIds: guardianProfileIds,
               start: guardianRange.start,
@@ -2573,6 +2576,23 @@ export function registerTools(server: McpServer, context: AulaContext): void {
         ...messageManualActionCandidates,
         ...postManualActionCandidates,
       ];
+
+      if (mode === 'actions') {
+        return jsonContent({
+          actionCandidates: {
+            manualActions: manualActionCandidates,
+          },
+          _meta: {
+            groupsQueried: groupIds.length,
+            postsFound: mergedPosts.length,
+            postLimit,
+            messageLimit: args.messageLimit ?? 30,
+            ...(postErrors.length > 0
+              ? { postErrors }
+              : {}),
+          },
+        });
+      }
 
       const schoolPayload = {
         children: schedule,
