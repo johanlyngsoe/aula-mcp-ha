@@ -140,6 +140,32 @@ describe('buildPostManualActionCandidates', () => {
     expect(candidate.detail).toContain('48  Mikkeline');
   });
 
+  test('preserves child-specific and actionable evidence from different attachments', () => {
+    const [candidate] = buildPostManualActionCandidates([
+      {
+        id: 501,
+        title: 'Fremlæggelsesoversigt',
+        text: 'Kære forældre. Se de vedhæftede dokumenter.',
+        appliesToChild: 'Barn A Efternavn',
+        attachments: [
+          {
+            name: 'Beskrivelse.pdf',
+            text: 'Praktisk information. Forældrene skal hjælpe barnet med at forberede sin præsentation hjemme og øve den.',
+          },
+          {
+            name: 'Oversigt.docx',
+            text: 'Uge\nNavn\n47\nBarn B\n48\nBarn A\n49\nBarn C',
+          },
+        ],
+      },
+    ]);
+    if (!candidate) throw new Error('missing candidate');
+
+    expect(candidate.detail).toContain('Barn A');
+    expect(candidate.detail).toMatch(/forældrene skal hjælpe/i);
+    expect(candidate.detail).toMatch(/forberede/i);
+  });
+
   test('supports shared post child bindings and flags missing child binding', () => {
     const [shared] = buildPostManualActionCandidates([
       { id: 44, title: 'Fælles opslag', appliesToChildren: ['Barn B', 'Barn A'] },
